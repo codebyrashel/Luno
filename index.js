@@ -1,6 +1,7 @@
 // =======================
 // IMPORTS
 // =======================
+require("dotenv").config();
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ChannelType } = require("discord.js");
 const {
   createAudioPlayer,
