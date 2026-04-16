@@ -28,7 +28,7 @@
     "activeBonus": 1
   },
   "1363805208404168797": {
-    "active": 1776154931023,
+    "active": null,
     "sessions": [
       {
         "start": 1776152719626,
@@ -39,10 +39,16 @@
         "start": 1776153695741,
         "end": 1776154930081,
         "xp": 20
+      },
+      {
+        "start": 1776154931023,
+        "end": 1776243739967,
+        "xp": 1480,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 36,
-    "weeklyXp": 36,
+    "totalXp": 1516,
+    "weeklyXp": 1516,
     "activeBonus": 1
   },
   "_meta": {
