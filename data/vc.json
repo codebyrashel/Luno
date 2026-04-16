@@ -28,7 +28,7 @@
     "activeBonus": 1
   },
   "1363805208404168797": {
-    "active": null,
+    "active": 1776365855523,
     "sessions": [
       {
         "start": 1776152719626,
@@ -45,10 +45,16 @@
         "end": 1776243739967,
         "xp": 1480,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776365712955,
+        "end": 1776365833850,
+        "xp": 2,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 1516,
-    "weeklyXp": 1516,
+    "totalXp": 1518,
+    "weeklyXp": 1518,
     "activeBonus": 1
   },
   "_meta": {
@@ -154,6 +160,32 @@
     "sessions": [],
     "totalXp": 0,
     "weeklyXp": 0,
+    "active": null,
+    "activeBonus": 1
+  },
+  "1326255849383006238": {
+    "sessions": [
+      {
+        "start": 1776365705743,
+        "end": 1776366041464,
+        "xp": 5,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776366242800,
+        "end": 1776366341980,
+        "xp": 1,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776366397125,
+        "end": 1776368469610,
+        "xp": 34,
+        "bonusMultiplier": 1
+      }
+    ],
+    "totalXp": 40,
+    "weeklyXp": 40,
     "active": null,
     "activeBonus": 1
   }
