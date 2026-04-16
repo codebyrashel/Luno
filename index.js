@@ -11,12 +11,14 @@ const {
   getVoiceConnection,
 } = require("@discordjs/voice");
 const { spawn } = require("child_process");
+const fs = require("fs");
 
 const interactionHandler = require("./events/interactionHandler");
 const { startFocusWatcher, startGoalWatcher } = require("./utils/time");
 const vcTracker = require("./services/vcTrackerService");
 const smartVCService = require("./services/smartVCService");
 const musicService = require("./services/musicService");
+const leetcodeService = require("./services/leetcodeService");
 
 // =======================
 // CONFIG
@@ -184,6 +186,33 @@ const commands = [
         .setDescription("Cancel your active goal")
     ),
 
+  // LEETCODE DAILY CHALLENGE
+  new SlashCommandBuilder()
+    .setName("leetcode")
+    .setDescription("LeetCode daily challenge settings")
+    .addSubcommand(cmd =>
+      cmd.setName("setchannel")
+        .setDescription("Set the channel for daily LeetCode problems")
+        .addChannelOption(opt =>
+          opt.setName("channel")
+            .setDescription("Text channel to send daily problems")
+            .setRequired(true)
+            .addChannelTypes(ChannelType.GuildText)
+        )
+    )
+    .addSubcommand(cmd =>
+      cmd.setName("disable")
+        .setDescription("Disable daily LeetCode problems")
+    )
+    .addSubcommand(cmd =>
+      cmd.setName("status")
+        .setDescription("Check LeetCode daily challenge status")
+    )
+    .addSubcommand(cmd =>
+      cmd.setName("now")
+        .setDescription("Get today's LeetCode daily challenge immediately")
+    ),
+
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -212,12 +241,111 @@ function getAudioStream(url) {
 }
 
 // =======================
+// LEETCODE DAILY SCHEDULER FUNCTIONS
+// =======================
+function ensureDataFolder() {
+  const dataDir = "./data";
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir);
+    console.log("Created data folder");
+  }
+  return dataDir;
+}
+
+function loadLeetcodeSettings() {
+  ensureDataFolder();
+  try {
+    const data = fs.readFileSync("./data/leetcodeSettings.json", "utf8");
+    const settings = JSON.parse(data);
+    
+    for (const [guildId, setting] of Object.entries(settings)) {
+      leetcodeService.setDailyChannel(guildId, setting.channelId);
+    }
+    console.log("Loaded LeetCode settings from data folder");
+  } catch (error) {
+    console.log("No saved LeetCode settings found in data folder");
+  }
+}
+
+function saveLeetcodeSettings(guildId, channelId) {
+  ensureDataFolder();
+  let leetcodeSettings = {};
+  try {
+    const data = fs.readFileSync("./data/leetcodeSettings.json", "utf8");
+    leetcodeSettings = JSON.parse(data);
+  } catch (error) {
+    // File doesn't exist yet
+  }
+  
+  leetcodeSettings[guildId] = {
+    guildId: guildId,
+    channelId: channelId,
+    enabled: true
+  };
+  fs.writeFileSync("./data/leetcodeSettings.json", JSON.stringify(leetcodeSettings, null, 2));
+}
+
+function removeLeetcodeSettings(guildId) {
+  ensureDataFolder();
+  let leetcodeSettings = {};
+  try {
+    const data = fs.readFileSync("./data/leetcodeSettings.json", "utf8");
+    leetcodeSettings = JSON.parse(data);
+  } catch (error) {
+    // File doesn't exist yet
+  }
+  
+  delete leetcodeSettings[guildId];
+  fs.writeFileSync("./data/leetcodeSettings.json", JSON.stringify(leetcodeSettings, null, 2));
+}
+
+function scheduleDailyChallenge() {
+  const now = new Date();
+  const night = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1,
+    0, 0, 0
+  );
+  
+  const msUntilMidnight = night.getTime() - now.getTime();
+  
+  setTimeout(() => {
+    sendDailyChallengesToAllGuilds();
+    setInterval(sendDailyChallengesToAllGuilds, 24 * 60 * 60 * 1000);
+  }, msUntilMidnight);
+  
+  console.log(`Daily challenge scheduled for ${night.toString()}`);
+}
+
+async function sendDailyChallengesToAllGuilds() {
+  console.log("Sending daily LeetCode challenges...");
+  
+  for (const [guildId, setting] of leetcodeService.settings) {
+    try {
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) continue;
+      
+      const channel = guild.channels.cache.get(setting.channelId);
+      if (!channel) continue;
+      
+      await leetcodeService.sendDailyChallenge(channel);
+      console.log(`Sent daily challenge to guild ${guildId}`);
+    } catch (error) {
+      console.error(`Failed to send daily challenge to guild ${guildId}:`, error);
+    }
+  }
+}
+
+// =======================
 // READY
 // =======================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
   startFocusWatcher(client);
   startGoalWatcher(client);
+  loadLeetcodeSettings();
+  scheduleDailyChallenge();
 });
 
 // =======================
@@ -340,6 +468,71 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 // =======================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
+  // -------------------
+  // LEETCODE COMMANDS
+  // -------------------
+  if (interaction.commandName === "leetcode") {
+    const subcommand = interaction.options.getSubcommand();
+    
+    if (subcommand === "setchannel") {
+      const channel = interaction.options.getChannel("channel");
+      
+      if (channel.type !== ChannelType.GuildText) {
+        return interaction.reply({ 
+          content: "Please select a text channel!", 
+          ephemeral: true 
+        });
+      }
+      
+      leetcodeService.setDailyChannel(interaction.guild.id, channel.id);
+      saveLeetcodeSettings(interaction.guild.id, channel.id);
+      
+      await interaction.reply({ 
+        content: `Daily LeetCode problems will be sent to ${channel}!`, 
+        ephemeral: true 
+      });
+    }
+    
+    else if (subcommand === "disable") {
+      leetcodeService.disableDaily(interaction.guild.id);
+      removeLeetcodeSettings(interaction.guild.id);
+      
+      await interaction.reply({ 
+        content: "Daily LeetCode problems have been disabled!", 
+        ephemeral: true 
+      });
+    }
+    
+    else if (subcommand === "status") {
+      const isEnabled = leetcodeService.isDailyEnabled(interaction.guild.id);
+      const channelId = leetcodeService.getDailyChannel(interaction.guild.id);
+      const channel = channelId ? interaction.guild.channels.cache.get(channelId) : null;
+      
+      let statusText = isEnabled 
+        ? `Enabled - Sending to ${channel ? channel.name : "unknown channel"}`
+        : "Disabled";
+      
+      await interaction.reply({ 
+        content: `LeetCode Daily Challenge Status:\n${statusText}`,
+        ephemeral: true 
+      });
+    }
+    
+    else if (subcommand === "now") {
+      await interaction.deferReply();
+      
+      try {
+        await leetcodeService.sendDailyChallenge(interaction.channel);
+        await interaction.editReply("Today's LeetCode daily challenge has been posted above!");
+      } catch (error) {
+        console.error(error);
+        await interaction.editReply("Failed to fetch today's daily challenge. Please try again later.");
+      }
+    }
+    
+    return;
+  }
 
   // -------------------
   // MUSIC COMMANDS
