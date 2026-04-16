@@ -2,7 +2,7 @@
 // IMPORTS
 // =======================
 require("dotenv").config();
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ChannelType } = require("discord.js");
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
 const {
   createAudioPlayer,
   createAudioResource,
@@ -16,7 +16,7 @@ const interactionHandler = require("./events/interactionHandler");
 const { startFocusWatcher, startGoalWatcher } = require("./utils/time");
 const vcTracker = require("./services/vcTrackerService");
 const smartVCService = require("./services/smartVCService");
-// const leaderboardCommand = require("./commands/leaderboard"); // REMOVED - now handled by interactionHandler
+const musicService = require("./services/musicService");
 
 // =======================
 // CONFIG
@@ -47,13 +47,17 @@ const commands = [
     .setDescription("Play YouTube audio")
     .addStringOption(opt =>
       opt.setName("url")
-        .setDescription("YouTube URL")
+        .setDescription("YouTube URL or Playlist")
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("stop")
     .setDescription("Stop and disconnect bot"),
+
+  new SlashCommandBuilder()
+    .setName("queue")
+    .setDescription("Show current music queue"),
 
   // FOCUS
   new SlashCommandBuilder()
@@ -193,7 +197,7 @@ async function registerCommands() {
 }
 
 // =======================
-// YT-DLP STREAM
+// YT-DLP STREAM (for simple play)
 // =======================
 function getAudioStream(url) {
   const yt = spawn("yt-dlp", [
@@ -210,11 +214,59 @@ function getAudioStream(url) {
 // =======================
 // READY
 // =======================
-client.once("clientReady", () => {
+client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
   startFocusWatcher(client);
   startGoalWatcher(client);
 });
+
+// =======================
+// HELPER FUNCTIONS FOR MUSIC EMBED
+// =======================
+function createMusicEmbed(session, currentSong, title) {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(title)
+    .setDescription(`**${currentSong?.title || "Nothing playing"}**`)
+    .addFields(
+      { name: "Requested by", value: currentSong?.requester?.username || "Unknown", inline: true },
+      { name: "Duration", value: musicService.formatTime(currentSong?.duration), inline: true },
+      { name: "Loop Mode", value: session.loop === "off" ? "Disabled" : session.loop === "song" ? "Single Song" : "Queue", inline: true },
+      { name: "Queue Length", value: `${session.queue.length} songs`, inline: true }
+    )
+    .setFooter({ text: "Music Player Controls" })
+    .setTimestamp();
+
+  if (currentSong?.thumbnail) {
+    embed.setThumbnail(currentSong.thumbnail);
+  }
+
+  return embed;
+}
+
+function createControlButtons(session) {
+  const row = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId("music_previous")
+        .setLabel("Previous")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("music_play_pause")
+        .setLabel(session.playing ? "Pause" : "Play")
+        .setStyle(session.playing ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("music_next")
+        .setLabel("Next")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("music_loop")
+        .setLabel(session.loop === "off" ? "Loop: Off" : session.loop === "song" ? "Loop: Song" : "Loop: Queue")
+        .setStyle(session.loop !== "off" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+  
+  return row;
+}
 
 // =======================
 // VC TRACKING (FIXED LOCATION)
@@ -265,6 +317,22 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   }
 
   smartVCService.voiceStateUpdate(oldState, newState);
+
+  // Auto-disconnect bot when no users in voice channel
+  const botId = client.user.id;
+  const botNewChannel = newState.guild.members.me?.voice.channel;
+  
+  if (botNewChannel) {
+    const members = botNewChannel.members.filter(member => !member.user.bot);
+    if (members.size === 0) {
+      setTimeout(() => {
+        const currentMembers = botNewChannel.members.filter(member => !member.user.bot);
+        if (currentMembers.size === 0) {
+          musicService.stop(newState.guild);
+        }
+      }, 30000);
+    }
+  }
 });
 
 // =======================
@@ -274,7 +342,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   // -------------------
-  // MUSIC
+  // MUSIC COMMANDS
   // -------------------
   if (interaction.commandName === "play") {
     await interaction.deferReply();
@@ -287,30 +355,21 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.editReply("Join a voice channel first.");
     }
 
-    let connection = getVoiceConnection(interaction.guild.id);
-
-    if (!connection) {
-      connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: interaction.guild.id,
-        adapterCreator: interaction.guild.voiceAdapterCreator,
-      });
-    }
-
     try {
-      const stream = getAudioStream(url);
-      const resource = createAudioResource(stream);
-
-      const player = createAudioPlayer({
-        behaviors: {
-          noSubscriber: NoSubscriberBehavior.Play,
-        },
-      });
-
-      player.play(resource);
-      connection.subscribe(player);
-
-      await interaction.editReply("Playing audio");
+      const songInfo = await musicService.addSong(interaction.guild, voiceChannel, url, interaction.user);
+      
+      const session = musicService.getSession(interaction.guild.id);
+      
+      const embed = createMusicEmbed(session, songInfo, "Added to queue");
+      const row = createControlButtons(session);
+      
+      if (session.lastMessage && session.lastMessage.editable) {
+        await session.lastMessage.edit({ embeds: [embed], components: [row] });
+        await interaction.editReply("Added to queue!");
+      } else {
+        const msg = await interaction.editReply({ embeds: [embed], components: [row] });
+        session.lastMessage = msg;
+      }
     } catch (err) {
       console.error(err);
       await interaction.editReply("Failed to play video.");
@@ -320,15 +379,44 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.commandName === "stop") {
     await interaction.deferReply();
+    musicService.stop(interaction.guild);
+    await interaction.editReply("Disconnected and cleared queue");
+    return;
+  }
 
-    const connection = getVoiceConnection(interaction.guild.id);
-
-    if (!connection) {
-      return interaction.editReply("Not connected.");
+  if (interaction.commandName === "queue") {
+    const session = musicService.getSession(interaction.guild.id);
+    
+    if (!session || (!session.current && session.queue.length === 0)) {
+      return interaction.reply("No music is playing or queued!");
     }
-
-    connection.destroy();
-    await interaction.editReply("Disconnected");
+    
+    let queueText = "";
+    if (session.current) {
+      queueText += `**Now Playing:** ${session.current.title}\n\n`;
+    }
+    
+    if (session.queue.length > 0) {
+      queueText += `**Queue (${session.queue.length} songs):**\n`;
+      session.queue.slice(0, 10).forEach((song, index) => {
+        queueText += `${index + 1}. ${song.title}\n`;
+      });
+      
+      if (session.queue.length > 10) {
+        queueText += `\nAnd ${session.queue.length - 10} more...`;
+      }
+    } else {
+      queueText += "Queue is empty!";
+    }
+    
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle("Music Queue")
+      .setDescription(queueText)
+      .setFooter({ text: `Loop mode: ${session.loop}` })
+      .setTimestamp();
+    
+    await interaction.reply({ embeds: [embed] });
     return;
   }
 
@@ -336,6 +424,107 @@ client.on("interactionCreate", async (interaction) => {
   // MODULAR (FOCUS, LEADERBOARD etc)
   // -------------------
   await interactionHandler(interaction);
+});
+
+// =======================
+// BUTTON INTERACTIONS
+// =======================
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  
+  const session = musicService.getSession(interaction.guild.id);
+  
+  if (!session || !session.playing) {
+    return interaction.reply({ content: "No music is playing!", ephemeral: true });
+  }
+  
+  switch (interaction.customId) {
+    case "music_previous":
+      const prevSuccess = musicService.prev(interaction.guild);
+      if (!prevSuccess) {
+        await interaction.reply({ content: "No previous song in history!", ephemeral: true });
+      } else {
+        await interaction.reply({ content: "Playing previous song!", ephemeral: true });
+      }
+      break;
+      
+    case "music_play_pause":
+      const status = musicService.togglePause(interaction.guild);
+      if (status === "paused") {
+        await interaction.reply({ content: "Paused", ephemeral: true });
+      } else if (status === "playing") {
+        await interaction.reply({ content: "Resumed", ephemeral: true });
+      }
+      break;
+      
+    case "music_next":
+      const skipSuccess = musicService.skip(interaction.guild);
+      if (!skipSuccess) {
+        await interaction.reply({ content: "No next song in queue!", ephemeral: true });
+      } else {
+        await interaction.reply({ content: "Skipped to next song!", ephemeral: true });
+      }
+      break;
+      
+    case "music_loop":
+      const loopRow = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId("loop_off")
+            .setLabel("No Loop")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("loop_song")
+            .setLabel("Loop Song")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId("loop_queue")
+            .setLabel("Loop Queue")
+            .setStyle(ButtonStyle.Success)
+        );
+      
+      await interaction.reply({ 
+        content: "Select loop mode:", 
+        components: [loopRow],
+        ephemeral: true 
+      });
+      break;
+      
+    case "loop_off":
+    case "loop_song":
+    case "loop_queue":
+      const mode = interaction.customId.split("_")[1];
+      const result = musicService.setLoop(interaction.guild, mode);
+      
+      let message = "";
+      if (result === "off") message = "Loop disabled";
+      else if (result === "song") message = "Loop mode: Single Song";
+      else if (result === "queue") message = "Loop mode: Entire Queue";
+      else message = "Cannot loop empty queue! Using song loop instead.";
+      
+      await interaction.update({ content: message, components: [] });
+      
+      const updatedSession = musicService.getSession(interaction.guild.id);
+      const updatedEmbed = createMusicEmbed(updatedSession, updatedSession.current, "Now Playing");
+      const updatedRow = createControlButtons(updatedSession);
+      
+      if (updatedSession.lastMessage && updatedSession.lastMessage.editable) {
+        await updatedSession.lastMessage.edit({ embeds: [updatedEmbed], components: [updatedRow] });
+      }
+      break;
+  }
+  
+  setTimeout(async () => {
+    const updatedSession = musicService.getSession(interaction.guild.id);
+    if (updatedSession && updatedSession.current) {
+      const updatedEmbed = createMusicEmbed(updatedSession, updatedSession.current, "Now Playing");
+      const updatedRow = createControlButtons(updatedSession);
+      
+      if (updatedSession.lastMessage && updatedSession.lastMessage.editable) {
+        await updatedSession.lastMessage.edit({ embeds: [updatedEmbed], components: [updatedRow] });
+      }
+    }
+  }, 100);
 });
 
 // =======================
