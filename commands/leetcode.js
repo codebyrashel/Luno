@@ -1,89 +1,56 @@
-const { SlashCommandBuilder, ChannelType } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const leetcodeService = require("../services/leetcodeService");
 const { saveLeetcodeSettings, removeLeetcodeSettings } = require("../utils/leetcodeScheduler");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("leetcode")
-        .setDescription("LeetCode daily challenge settings")
-        .addSubcommand(cmd =>
-            cmd.setName("setchannel")
-                .setDescription("Set the channel for daily LeetCode problems")
-                .addChannelOption(opt =>
-                    opt.setName("channel")
-                        .setDescription("Text channel to send daily problems")
-                        .setRequired(true)
-                        .addChannelTypes(ChannelType.GuildText)
-                )
-        )
-        .addSubcommand(cmd =>
-            cmd.setName("disable")
-                .setDescription("Disable daily LeetCode problems")
-        )
-        .addSubcommand(cmd =>
-            cmd.setName("status")
-                .setDescription("Check LeetCode daily challenge status")
-        )
-        .addSubcommand(cmd =>
-            cmd.setName("now")
-                .setDescription("Get today's LeetCode daily challenge immediately")
-        ),
-    execute: async (interaction, leetcodeService) => {
-        const subcommand = interaction.options.getSubcommand();
+        .setDescription("LeetCode daily challenge management"),
+
+    async execute(interaction) {
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId("leetcode_action_select")
+            .setPlaceholder("Select an action")
+            .addOptions([
+                {
+                    label: "Get Today's Challenge",
+                    description: "View today's LeetCode daily problem",
+                    value: "now"
+                },
+                {
+                    label: "Set Daily Channel",
+                    description: "Set channel for automatic daily problems",
+                    value: "setchannel"
+                },
+                {
+                    label: "Disable Daily Posts",
+                    description: "Stop automatic daily problem posts",
+                    value: "disable"
+                },
+                {
+                    label: "Check Status",
+                    description: "See current LeetCode settings",
+                    value: "status"
+                }
+            ]);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
         
-        if (subcommand === "setchannel") {
-            const channel = interaction.options.getChannel("channel");
-            
-            if (channel.type !== ChannelType.GuildText) {
-                return interaction.reply({ 
-                    content: "Please select a text channel!", 
-                    ephemeral: true 
-                });
-            }
-            
-            leetcodeService.setDailyChannel(interaction.guild.id, channel.id);
-            saveLeetcodeSettings(interaction.guild.id, channel.id);
-            
-            await interaction.reply({ 
-                content: `Daily LeetCode problems will be sent to ${channel}!`, 
-                ephemeral: true 
-            });
-        }
+        await interaction.reply({
+            content: "LeetCode System\nSelect an action below:",
+            components: [row],
+            flags: 64
+        });
         
-        else if (subcommand === "disable") {
-            leetcodeService.disableDaily(interaction.guild.id);
-            removeLeetcodeSettings(interaction.guild.id);
-            
-            await interaction.reply({ 
-                content: "Daily LeetCode problems have been disabled!", 
-                ephemeral: true 
-            });
-        }
+        interaction.client.leetcodeContext = {
+            interaction
+        };
         
-        else if (subcommand === "status") {
-            const isEnabled = leetcodeService.isDailyEnabled(interaction.guild.id);
-            const channelId = leetcodeService.getDailyChannel(interaction.guild.id);
-            const channel = channelId ? interaction.guild.channels.cache.get(channelId) : null;
-            
-            let statusText = isEnabled 
-                ? `Enabled - Sending to ${channel ? channel.name : "unknown channel"}`
-                : "Disabled";
-            
-            await interaction.reply({ 
-                content: `LeetCode Daily Challenge Status:\n${statusText}`,
-                ephemeral: true 
-            });
-        }
-        
-        else if (subcommand === "now") {
-            await interaction.deferReply();
-            
+        setTimeout(async () => {
             try {
-                await leetcodeService.sendDailyChallenge(interaction.channel);
-                await interaction.editReply("Today's LeetCode daily challenge has been posted above!");
-            } catch (error) {
-                console.error(error);
-                await interaction.editReply("Failed to fetch today's daily challenge. Please try again later.");
-            }
-        }
+                await interaction.deleteReply();
+            } catch (e) {}
+            delete interaction.client.leetcodeContext;
+        }, 30000);
     }
 };

@@ -8,6 +8,11 @@ const fs = require("fs");
 const interactionHandler = require("./events/interactionHandler");
 const buttonHandler = require("./events/buttonHandler");
 const selectMenuHandler = require("./events/selectMenuHandler");
+const focusMenuHandler = require("./events/focusMenuHandler");
+const goalMenuHandler = require("./events/goalMenuHandler");
+const leaderboardMenuHandler = require("./events/leaderboardMenuHandler");
+const leetcodeMenuHandler = require("./events/leetcodeMenuHandler");
+const smartvcMenuHandler = require("./events/smartvcMenuHandler");
 const voiceHandler = require("./events/voiceHandler");
 const { startFocusWatcher, startGoalWatcher } = require("./utils/time");
 const { loadLeetcodeSettings, scheduleDailyChallenge } = require("./utils/leetcodeScheduler");
@@ -91,12 +96,35 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 // INTERACTION CREATE
 // =======================
 client.on("interactionCreate", async (interaction) => {
+    // Handle smartvc menu interactions
+    const isSmartvcMenuHandled = await smartvcMenuHandler(interaction);
+    if (isSmartvcMenuHandled) return;
+    
+    // Handle leetcode menu interactions
+    const isLeetcodeMenuHandled = await leetcodeMenuHandler(interaction);
+    if (isLeetcodeMenuHandled) return;
+    
+    // Handle leaderboard menu interactions
+    const isLeaderboardMenuHandled = await leaderboardMenuHandler(interaction);
+    if (isLeaderboardMenuHandled) return;
+    
+    // Handle goal menu interactions
+    const isGoalMenuHandled = await goalMenuHandler(interaction);
+    if (isGoalMenuHandled) return;
+    
+    // Handle focus menu interactions
+    const isFocusMenuHandled = await focusMenuHandler(interaction);
+    if (isFocusMenuHandled) return;
+    
+    // Handle queue select menu
     const isSelectMenuHandled = await selectMenuHandler(interaction, musicService);
     if (isSelectMenuHandled) return;
     
+    // Handle music control buttons
     const isButtonHandled = await buttonHandler(interaction, musicService);
     if (isButtonHandled) return;
     
+    // Handle all other slash commands
     await interactionHandler(interaction);
 });
 
