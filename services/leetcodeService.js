@@ -41,45 +41,21 @@ class LeetCodeService {
     formatDailyChallenge(dailyData) {
         const problem = dailyData.question;
         
-        let content = `[LeetCode Daily Challenge]\n`;
-        content += `Date: ${dailyData.date}\n`;
-        content += `Problem: ${problem.title}\n`;
+        let content = `[ LeetCode Daily Challenge ]\n`;
+        content += `\n`;
+        content += `Title: ${problem.title}\n`;
+        content += `\n`;
         content += `Difficulty: ${problem.difficulty}\n`;
-        content += `Link: https://leetcode.com/problems/${problem.titleSlug}/\n\n`;
-        content += `Description:\n${this.cleanDescription(problem.content)}\n\n`;
+        content += `\n`;
+        content += `Date: ${dailyData.date}\n`;
+        content += `\n`;
         content += `Topics: ${problem.topicTags.map(tag => tag.name).join(", ")}\n`;
-        content += `\nClick the link above to submit your solution!`;
+        content += `\n`;
+        content += `Link: https://leetcode.com/problems/${problem.titleSlug}/\n`;
+        content += `\n`;
+        content += `Click the link above to submit your solution!`;
         
         return content;
-    }
-
-    cleanDescription(htmlContent) {
-        if (!htmlContent) return "No description available.";
-        
-        let text = htmlContent
-            .replace(/<pre>[\s\S]*?<\/pre>/g, (match) => {
-                return "\n```\n" + this.cleanHtml(match) + "\n```\n";
-            })
-            .replace(/<[^>]*>/g, "")
-            .replace(/&nbsp;/g, " ")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/&amp;/g, "&")
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/\s+/g, " ")
-            .trim();
-        
-        return text;
-    }
-
-    cleanHtml(html) {
-        return html
-            .replace(/<[^>]*>/g, "")
-            .replace(/&nbsp;/g, " ")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/&amp;/g, "&");
     }
 
     splitMessage(content, maxLength = 2000) {

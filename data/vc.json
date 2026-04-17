@@ -28,7 +28,7 @@
     "activeBonus": 1
   },
   "1363805208404168797": {
-    "active": 1776429157436,
+    "active": 1776438585077,
     "sessions": [
       {
         "start": 1776152719626,
@@ -99,10 +99,22 @@
         "end": 1776427945562,
         "xp": 0,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776429157436,
+        "end": 1776436723018,
+        "xp": 126,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776436786274,
+        "end": 1776437733838,
+        "xp": 15,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 1733,
-    "weeklyXp": 1733,
+    "totalXp": 1874,
+    "weeklyXp": 1874,
     "activeBonus": 1
   },
   "_meta": {
@@ -281,10 +293,22 @@
         "end": 1776432796991,
         "xp": 0,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776437000686,
+        "end": 1776437721709,
+        "xp": 12,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776438586093,
+        "end": 1776438708418,
+        "xp": 2,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 117,
-    "weeklyXp": 117,
+    "totalXp": 131,
+    "weeklyXp": 131,
     "active": null,
     "activeBonus": 1
   },
@@ -362,10 +386,28 @@
         "end": 1776428622728,
         "xp": 5,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776437716171,
+        "end": 1776437723564,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776438906875,
+        "end": 1776439168941,
+        "xp": 4,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776439194082,
+        "end": 1776439353759,
+        "xp": 2,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 120,
-    "weeklyXp": 120,
+    "totalXp": 126,
+    "weeklyXp": 126,
     "active": null,
     "activeBonus": 1
   },
@@ -396,11 +438,17 @@
         "end": 1776423095879,
         "xp": 13,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776438576714,
+        "end": 1776439594848,
+        "xp": 16,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 13,
-    "weeklyXp": 13,
-    "active": null,
+    "totalXp": 29,
+    "weeklyXp": 29,
+    "active": 1776439659480,
     "activeBonus": 1
   },
   "914924071588859944": {
