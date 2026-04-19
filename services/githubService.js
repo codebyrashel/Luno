@@ -1,7 +1,17 @@
 const { spawn } = require("child_process");
 
 class GitHubService {
-    async getUserEvents(username) {
+    constructor() {
+        // Bangladesh timezone offset (UTC+6)
+        this.timezoneOffset = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+    }
+
+    getBangladeshDate(timestamp = Date.now()) {
+        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
+        return bangladeshTime.toISOString().split('T')[0];
+    }
+
+    getUserEvents(username) {
         return new Promise((resolve, reject) => {
             const curl = spawn("curl", [
                 "-s",
@@ -52,13 +62,16 @@ class GitHubService {
     async getTodayCommits(username) {
         try {
             const events = await this.getUserEvents(username);
-            const today = new Date().toISOString().split('T')[0];
+            const todayBD = this.getBangladeshDate();
             
             let commitCount = 0;
             for (const event of events) {
-                const eventDate = new Date(event.created_at).toISOString().split('T')[0];
-                if (eventDate === today && event.type === "PushEvent") {
-                    commitCount += event.payload.commits?.length || 0;
+                if (event.type === "PushEvent") {
+                    // Convert event time to Bangladesh timezone
+                    const eventDate = this.getBangladeshDate(new Date(event.created_at).getTime());
+                    if (eventDate === todayBD) {
+                        commitCount += event.payload.commits?.length || 0;
+                    }
                 }
             }
             return commitCount;
@@ -71,14 +84,16 @@ class GitHubService {
     async getWeeklyCommits(username) {
         try {
             const events = await this.getUserEvents(username);
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
+            const nowBD = new Date(Date.now() + this.timezoneOffset);
+            const weekAgoBD = new Date(nowBD.getTime() - 7 * 24 * 60 * 60 * 1000);
             
             let commitCount = 0;
             for (const event of events) {
-                const eventDate = new Date(event.created_at);
-                if (eventDate >= weekAgo && event.type === "PushEvent") {
-                    commitCount += event.payload.commits?.length || 0;
+                if (event.type === "PushEvent") {
+                    const eventDate = new Date(new Date(event.created_at).getTime() + this.timezoneOffset);
+                    if (eventDate >= weekAgoBD) {
+                        commitCount += event.payload.commits?.length || 0;
+                    }
                 }
             }
             return commitCount;
@@ -95,17 +110,18 @@ class GitHubService {
             
             if (pushEvents.length === 0) return 0;
             
+            // Convert all event dates to Bangladesh timezone
             const dates = [...new Set(pushEvents.map(event => 
-                new Date(event.created_at).toISOString().split('T')[0]
+                this.getBangladeshDate(new Date(event.created_at).getTime())
             ))];
             
             dates.sort().reverse();
             
             let streak = 1;
-            const today = new Date().toISOString().split('T')[0];
-            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            const todayBD = this.getBangladeshDate();
+            const yesterdayBD = this.getBangladeshDate(Date.now() - 86400000);
             
-            if (!dates.includes(today) && !dates.includes(yesterday)) {
+            if (!dates.includes(todayBD) && !dates.includes(yesterdayBD)) {
                 return 0;
             }
             
