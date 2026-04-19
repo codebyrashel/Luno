@@ -8,7 +8,21 @@ class GitHubService {
 
     getBangladeshDate(timestamp = Date.now()) {
         const bangladeshTime = new Date(timestamp + this.timezoneOffset);
-        return bangladeshTime.toISOString().split('T')[0];
+        const year = bangladeshTime.getUTCFullYear();
+        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    getBangladeshDateTime(timestamp = Date.now()) {
+        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
+        const year = bangladeshTime.getUTCFullYear();
+        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
+        const hours = String(bangladeshTime.getUTCHours()).padStart(2, '0');
+        const minutes = String(bangladeshTime.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(bangladeshTime.getUTCSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 
     getUserEvents(username) {
@@ -67,13 +81,13 @@ class GitHubService {
             let commitCount = 0;
             for (const event of events) {
                 if (event.type === "PushEvent") {
-                    // Convert event time to Bangladesh timezone
                     const eventDate = this.getBangladeshDate(new Date(event.created_at).getTime());
                     if (eventDate === todayBD) {
                         commitCount += event.payload.commits?.length || 0;
                     }
                 }
             }
+            console.log(`[DEBUG] ${username}: ${commitCount} commits today (Bangladesh date: ${todayBD})`);
             return commitCount;
         } catch (error) {
             console.error(`Error fetching commits for ${username}:`, error.message);
@@ -110,7 +124,6 @@ class GitHubService {
             
             if (pushEvents.length === 0) return 0;
             
-            // Convert all event dates to Bangladesh timezone
             const dates = [...new Set(pushEvents.map(event => 
                 this.getBangladeshDate(new Date(event.created_at).getTime())
             ))];
