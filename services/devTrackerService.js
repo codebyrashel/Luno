@@ -4,6 +4,20 @@ const githubService = require("./githubService");
 
 const FILE = path.join(__dirname, "../data/devtracker.json");
 
+// Bangladesh timezone offset (UTC+6)
+const TIMEZONE_OFFSET = 6 * 60 * 60 * 1000;
+
+function getBangladeshDateTime(timestamp = Date.now()) {
+    const bangladeshTime = new Date(timestamp + TIMEZONE_OFFSET);
+    const year = bangladeshTime.getUTCFullYear();
+    const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
+    const hours = String(bangladeshTime.getUTCHours()).padStart(2, '0');
+    const minutes = String(bangladeshTime.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(bangladeshTime.getUTCSeconds()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
 function loadData() {
     try {
         if (!fs.existsSync(FILE)) {
@@ -107,7 +121,8 @@ async function fetchUserStats(userId, userData) {
         stats.github.hasCommittedToday = stats.github.commitsToday > 0;
 
         if (stats.github.hasCommittedToday) {
-            updateLastCommit(userId, new Date().toISOString().split('T')[0]);
+            const bangladeshDate = githubService.getBangladeshDate();
+            updateLastCommit(userId, bangladeshDate);
             resetMissedDays(userId);
         }
     }
@@ -127,7 +142,8 @@ function formatUserStats(stats) {
         output += "No GitHub profile registered.\n";
     }
 
-    output += `Last updated: ${new Date(stats.timestamp).toLocaleString()}`;
+    const bangladeshTime = getBangladeshDateTime(stats.timestamp);
+    output += `Last updated: ${bangladeshTime} (Bangladesh Time)`;
 
     return output;
 }
