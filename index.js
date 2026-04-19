@@ -20,8 +20,6 @@ const vcTracker = require("./services/vcTrackerService");
 const smartVCService = require("./services/smartVCService");
 const musicService = require("./services/musicService");
 const leetcodeService = require("./services/leetcodeService");
-
-// Import command files for registration
 const focusCommand = require("./commands/focus");
 const leaderboardCommand = require("./commands/leaderboard");
 const goalCommand = require("./commands/goal");
