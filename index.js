@@ -13,9 +13,11 @@ const goalMenuHandler = require("./events/goalMenuHandler");
 const leaderboardMenuHandler = require("./events/leaderboardMenuHandler");
 const leetcodeMenuHandler = require("./events/leetcodeMenuHandler");
 const smartvcMenuHandler = require("./events/smartvcMenuHandler");
+const devtrackerHandler = require("./events/devtrackerHandler");
 const voiceHandler = require("./events/voiceHandler");
 const { startFocusWatcher, startGoalWatcher } = require("./utils/time");
 const { loadLeetcodeSettings, scheduleDailyChallenge } = require("./utils/leetcodeScheduler");
+const { scheduleDevTracker } = require("./utils/devtrackerScheduler");
 const vcTracker = require("./services/vcTrackerService");
 const smartVCService = require("./services/smartVCService");
 const musicService = require("./services/musicService");
@@ -26,6 +28,7 @@ const goalCommand = require("./commands/goal");
 const smartVCCommand = require("./commands/smartvc");
 const musicCommands = require("./commands/music");
 const leetcodeCommand = require("./commands/leetcode");
+const devTrackerCommand = require("./commands/devtracker");
 
 // =======================
 // CONFIG
@@ -56,6 +59,7 @@ const commands = [
     leaderboardCommand.data,
     goalCommand.data,
     smartVCCommand.data,
+    devTrackerCommand.data,
 ].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -81,6 +85,7 @@ client.once("clientReady", () => {
     startGoalWatcher(client);
     loadLeetcodeSettings(leetcodeService);
     scheduleDailyChallenge(client, leetcodeService);
+    scheduleDevTracker(client);
 });
 
 // =======================
@@ -94,6 +99,16 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 // INTERACTION CREATE
 // =======================
 client.on("interactionCreate", async (interaction) => {
+    // Handle devtracker interactions FIRST (select menus and modals)
+    const isDevtrackerHandled = await devtrackerHandler(interaction);
+    if (isDevtrackerHandled) return;
+    
+    // Handle devtracker slash command
+    if (interaction.isChatInputCommand() && interaction.commandName === "devtracker") {
+        await devTrackerCommand.execute(interaction);
+        return;
+    }
+    
     // Handle smartvc menu interactions
     const isSmartvcMenuHandled = await smartvcMenuHandler(interaction);
     if (isSmartvcMenuHandled) return;

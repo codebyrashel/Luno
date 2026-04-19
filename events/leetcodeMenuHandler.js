@@ -10,50 +10,79 @@ async function handleSelectMenu(interaction) {
         const context = interaction.client.leetcodeContext;
         
         if (!context) {
-            const msg = await interaction.reply({ 
-                content: "Session expired. Please use /leetcode again.",
-                flags: 64 
-            });
-            setTimeout(async () => {
-                try {
-                    await msg.delete();
-                } catch (e) {}
-            }, 3000);
+            // Check if interaction is already replied or deferred
+            if (!interaction.replied && !interaction.deferred) {
+                const msg = await interaction.reply({ 
+                    content: "Session expired. Please use /leetcode again.",
+                    flags: 64 
+                });
+                setTimeout(async () => {
+                    try {
+                        await msg.delete();
+                    } catch (e) {}
+                }, 3000);
+            }
             return true;
         }
         
         try {
-            await interaction.message.delete();
+            // Try to delete the original message, but don't fail if it's already gone
+            try {
+                await interaction.message.delete();
+            } catch (e) {
+                // Message might already be deleted, ignore
+            }
         } catch (e) {}
         
         switch (action) {
             case "now":
-                await interaction.deferReply({ flags: 64 });
+                // Check if interaction is already replied or deferred
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.deferReply({ flags: 64 });
+                }
                 
                 try {
                     await leetcodeService.sendDailyChallenge(interaction.channel);
-                    const msg = await interaction.editReply("Today's LeetCode daily challenge has been posted above!");
-                    setTimeout(async () => {
-                        try {
-                            await msg.delete();
-                        } catch (e) {}
-                    }, 3000);
+                    if (!interaction.replied && !interaction.deferred) {
+                        const msg = await interaction.editReply("Today's LeetCode daily challenge has been posted above!");
+                        setTimeout(async () => {
+                            try {
+                                await msg.delete();
+                            } catch (e) {}
+                        }, 3000);
+                    } else {
+                        await interaction.followUp({ content: "Today's LeetCode daily challenge has been posted above!", flags: 64 });
+                    }
                 } catch (error) {
-                    const msg = await interaction.editReply("Failed to fetch today's daily challenge. Please try again later.");
-                    setTimeout(async () => {
-                        try {
-                            await msg.delete();
-                        } catch (e) {}
-                    }, 5000);
+                    if (!interaction.replied && !interaction.deferred) {
+                        const msg = await interaction.editReply("Failed to fetch today's daily challenge. Please try again later.");
+                        setTimeout(async () => {
+                            try {
+                                await msg.delete();
+                            } catch (e) {}
+                        }, 5000);
+                    } else {
+                        await interaction.followUp({ content: "Failed to fetch today's daily challenge. Please try again later.", flags: 64 });
+                    }
                 }
                 break;
                 
             case "setchannel":
-                // Ask for channel selection
-                const channelMsg = await interaction.reply({
-                    content: "Please mention the text channel where daily LeetCode problems should be posted:",
-                    flags: 64
-                });
+                // Check if interaction is already replied or deferred
+                if (!interaction.replied && !interaction.deferred) {
+                    const channelMsg = await interaction.reply({
+                        content: "Please mention the text channel where daily LeetCode problems should be posted:",
+                        flags: 64
+                    });
+                    
+                    // Store the channel message for later deletion
+                    interaction.client.leetcodeChannelMsg = channelMsg;
+                } else {
+                    await interaction.followUp({
+                        content: "Please mention the text channel where daily LeetCode problems should be posted:",
+                        flags: 64
+                    });
+                }
                 
                 // Create a channel collector
                 const filter = (m) => m.author.id === interaction.user.id && m.mentions.channels.size > 0;
@@ -105,25 +134,39 @@ async function handleSelectMenu(interaction) {
                             } catch (e) {}
                         }, 3000);
                     }
+                    // Try to delete the original channel message
                     try {
-                        await channelMsg.delete();
+                        if (interaction.client.leetcodeChannelMsg) {
+                            await interaction.client.leetcodeChannelMsg.delete();
+                        }
                     } catch (e) {}
                 });
                 break;
                 
             case "disable":
-                leetcodeService.disableDaily(interaction.guild.id);
-                removeLeetcodeSettings(interaction.guild.id);
-                
-                const disableMsg = await interaction.reply({ 
-                    content: "Daily LeetCode problems have been disabled!",
-                    flags: 64 
-                });
-                setTimeout(async () => {
-                    try {
-                        await disableMsg.delete();
-                    } catch (e) {}
-                }, 3000);
+                // Check if interaction is already replied or deferred
+                if (!interaction.replied && !interaction.deferred) {
+                    leetcodeService.disableDaily(interaction.guild.id);
+                    removeLeetcodeSettings(interaction.guild.id);
+                    
+                    const disableMsg = await interaction.reply({ 
+                        content: "Daily LeetCode problems have been disabled!",
+                        flags: 64 
+                    });
+                    setTimeout(async () => {
+                        try {
+                            await disableMsg.delete();
+                        } catch (e) {}
+                    }, 3000);
+                } else {
+                    leetcodeService.disableDaily(interaction.guild.id);
+                    removeLeetcodeSettings(interaction.guild.id);
+                    
+                    await interaction.followUp({ 
+                        content: "Daily LeetCode problems have been disabled!",
+                        flags: 64 
+                    });
+                }
                 break;
                 
             case "status":
@@ -141,15 +184,23 @@ async function handleSelectMenu(interaction) {
                     statusText += "Use 'Set Daily Channel' to enable automatic daily posts.";
                 }
                 
-                const statusMsg = await interaction.reply({ 
-                    content: statusText,
-                    flags: 64 
-                });
-                setTimeout(async () => {
-                    try {
-                        await statusMsg.delete();
-                    } catch (e) {}
-                }, 10000);
+                // Check if interaction is already replied or deferred
+                if (!interaction.replied && !interaction.deferred) {
+                    const statusMsg = await interaction.reply({ 
+                        content: statusText,
+                        flags: 64 
+                    });
+                    setTimeout(async () => {
+                        try {
+                            await statusMsg.delete();
+                        } catch (e) {}
+                    }, 10000);
+                } else {
+                    await interaction.followUp({ 
+                        content: statusText,
+                        flags: 64 
+                    });
+                }
                 break;
         }
         
@@ -161,5 +212,10 @@ async function handleSelectMenu(interaction) {
 }
 
 module.exports = async (interaction) => {
+    // Check if the interaction is already handled
+    if (interaction.replied || interaction.deferred) {
+        console.log("Interaction already handled, skipping");
+        return false;
+    }
     return await handleSelectMenu(interaction);
 };
