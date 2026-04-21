@@ -2,209 +2,187 @@ const https = require("https");
 
 class GitHubService {
     constructor() {
-        // Bangladesh timezone offset (UTC+6)
-        this.timezoneOffset = 6 * 60 * 60 * 1000;
-    }
-
-    getBangladeshDate(timestamp = Date.now()) {
-        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
-        const year = bangladeshTime.getUTCFullYear();
-        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    getBangladeshDateTime(timestamp = Date.now()) {
-        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
-        const year = bangladeshTime.getUTCFullYear();
-        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
-        
-        let hours = bangladeshTime.getUTCHours();
-        const minutes = String(bangladeshTime.getUTCMinutes()).padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12; // Convert 0 to 12
-        
-        return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+        this.baseURL = "https://api.github.com";
     }
 
     async fetchJSON(url) {
         return new Promise((resolve, reject) => {
-            https.get(url, (response) => {
+            const options = {
+                headers: {
+                    "User-Agent": "Luno-Bot",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+            };
+
+            https.get(url, options, (res) => {
                 let data = "";
-                
-                response.on("data", (chunk) => {
-                    data += chunk;
-                });
-                
-                response.on("end", () => {
+
+                res.on("data", chunk => data += chunk);
+
+                res.on("end", () => {
                     try {
                         const json = JSON.parse(data);
-                        if (response.statusCode === 404) {
-                            reject(new Error("Not Found"));
-                            return;
+
+                        if (res.statusCode !== 200) {
+                            return reject(new Error(`GitHub API Error ${res.statusCode}`));
                         }
-                        if (response.statusCode === 403 && data.includes("rate limit")) {
-                            reject(new Error("API rate limit exceeded"));
-                            return;
-                        }
-                        if (response.statusCode !== 200) {
-                            reject(new Error(`HTTP ${response.statusCode}: ${data.substring(0, 100)}`));
-                            return;
-                        }
+
                         resolve(json);
-                    } catch (e) {
-                        reject(new Error(`Failed to parse JSON: ${e.message}`));
+                    } catch (err) {
+                        reject(new Error("Failed to parse JSON"));
                     }
                 });
-            }).on("error", (err) => {
-                reject(new Error(`Network error: ${err.message}`));
-            });
+
+            }).on("error", err => reject(err));
         });
     }
 
-    async getUserEvents(username) {
+    // Get Bangladesh day range in ISO (UTC-safe)
+    getTodayRangeBD() {
+        const now = new Date();
+
+        // Convert to Bangladesh time
+        const bd = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+
+        const start = new Date(Date.UTC(
+            bd.getUTCFullYear(),
+            bd.getUTCMonth(),
+            bd.getUTCDate(),
+            0, 0, 0
+        ));
+
+        const end = new Date(Date.UTC(
+            bd.getUTCFullYear(),
+            bd.getUTCMonth(),
+            bd.getUTCDate(),
+            23, 59, 59
+        ));
+
+        return {
+            since: start.toISOString(),
+            until: end.toISOString()
+        };
+    }
+
+    async getUserRepos(username) {
         try {
-            const url = `https://api.github.com/users/${username}/events`;
-            console.log(`[DEBUG] Fetching events from: ${url}`);
-            const events = await this.fetchJSON(url);
-            console.log(`[DEBUG] Fetched ${events.length} events for ${username}`);
-            return events;
-        } catch (error) {
-            console.error(`Error fetching events for ${username}:`, error.message);
-            throw error;
+            const url = `${this.baseURL}/users/${username}/repos?per_page=100`;
+            return await this.fetchJSON(url);
+        } catch (err) {
+            console.error(`Repo fetch error for ${username}:`, err.message);
+            return [];
         }
     }
 
-    async getCommitsBetween(repo, before, head) {
+    async getRepoCommits(repoFullName, username, since, until) {
         try {
-            const url = `https://api.github.com/repos/${repo}/compare/${before}...${head}`;
-            const data = await this.fetchJSON(url);
-            const commitCount = data.total_commits || data.commits?.length || 0;
-            return commitCount;
-        } catch (error) {
-            console.error(`Compare API error for ${repo}:`, error.message);
+            const url = `${this.baseURL}/repos/${repoFullName}/commits?author=${username}&since=${since}&until=${until}`;
+            const commits = await this.fetchJSON(url);
+            return commits.length;
+        } catch (err) {
+            console.error(`Commit fetch error for ${repoFullName}:`, err.message);
             return 0;
         }
     }
 
     async getTodayCommits(username) {
         try {
-            console.log(`[DEBUG] Fetching commits for ${username}...`);
-            const events = await this.getUserEvents(username);
-            const todayBD = this.getBangladeshDate();
-            
-            console.log(`[DEBUG] Today's Bangladesh date: ${todayBD}`);
-            console.log(`[DEBUG] Total events received: ${events.length}`);
-            
-            let totalCommits = 0;
-            let pushCount = 0;
-            
-            const pushEvents = events.filter(event => event.type === "PushEvent");
-            console.log(`[DEBUG] Push events found: ${pushEvents.length}`);
-            
-            for (const event of pushEvents) {
-                const eventDate = this.getBangladeshDate(new Date(event.created_at).getTime());
-                console.log(`[DEBUG] Event date: ${eventDate}, repo: ${event.repo.name}`);
-                
-                if (eventDate === todayBD) {
-                    const repo = event.repo.name;
-                    const before = event.payload.before;
-                    const head = event.payload.head;
-                    
-                    console.log(`[DEBUG] Processing push - repo: ${repo}, before: ${before.substring(0, 7)}..., head: ${head.substring(0, 7)}...`);
-                    
-                    if (before === "0000000000000000000000000000000000000000") {
-                        console.log(`[DEBUG] Skipping - new branch creation`);
-                        continue;
-                    }
-                    
-                    const commitCount = await this.getCommitsBetween(repo, before, head);
-                    console.log(`[DEBUG] Commits in this push: ${commitCount}`);
-                    totalCommits += commitCount;
-                    pushCount++;
-                }
+            console.log(`[DEBUG] Accurate commit fetch for ${username}`);
+
+            const { since, until } = this.getTodayRangeBD();
+
+            const repos = await this.getUserRepos(username);
+
+            if (!repos.length) {
+                console.log(`[DEBUG] No repos found`);
+                return 0;
             }
-            
-            console.log(`[DEBUG] ${username}: ${totalCommits} commits from ${pushCount} push(es) on ${todayBD}`);
-            return totalCommits;
-        } catch (error) {
-            console.error(`Error fetching commits for ${username}:`, error.message);
+
+            let total = 0;
+
+            // Sequential to avoid rate limit drama on Railway
+            for (const repo of repos) {
+                const count = await this.getRepoCommits(
+                    repo.full_name,
+                    username,
+                    since,
+                    until
+                );
+                total += count;
+            }
+
+            console.log(`[DEBUG] ${username} → ${total} commits today`);
+            return total;
+
+        } catch (err) {
+            console.error(`Error in getTodayCommits:`, err.message);
             return 0;
         }
     }
 
     async getWeeklyCommits(username) {
         try {
-            const events = await this.getUserEvents(username);
-            const nowBD = new Date(Date.now() + this.timezoneOffset);
-            const weekAgoBD = new Date(nowBD.getTime() - 7 * 24 * 60 * 60 * 1000);
-            
-            let totalCommits = 0;
-            
-            for (const event of events) {
-                if (event.type === "PushEvent") {
-                    const eventDate = new Date(new Date(event.created_at).getTime() + this.timezoneOffset);
-                    
-                    if (eventDate >= weekAgoBD) {
-                        const repo = event.repo.name;
-                        const before = event.payload.before;
-                        const head = event.payload.head;
-                        
-                        if (before === "0000000000000000000000000000000000000000") {
-                            continue;
-                        }
-                        
-                        const commitCount = await this.getCommitsBetween(repo, before, head);
-                        totalCommits += commitCount;
-                    }
-                }
+            const now = new Date();
+            const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            const until = now.toISOString();
+
+            const repos = await this.getUserRepos(username);
+
+            let total = 0;
+
+            for (const repo of repos) {
+                const count = await this.getRepoCommits(
+                    repo.full_name,
+                    username,
+                    since,
+                    until
+                );
+                total += count;
             }
-            
-            return totalCommits;
-        } catch (error) {
-            console.error(`Error fetching weekly commits for ${username}:`, error.message);
+
+            return total;
+
+        } catch (err) {
+            console.error(`Weekly error:`, err.message);
             return 0;
         }
     }
 
     async getContributionStreak(username) {
         try {
-            const events = await this.getUserEvents(username);
-            const pushEvents = events.filter(event => event.type === "PushEvent");
-            
-            if (pushEvents.length === 0) return 0;
-            
-            const dates = [...new Set(pushEvents.map(event => 
-                this.getBangladeshDate(new Date(event.created_at).getTime())
-            ))];
-            
-            dates.sort().reverse();
-            
-            let streak = 1;
-            const todayBD = this.getBangladeshDate();
-            const yesterdayBD = this.getBangladeshDate(Date.now() - 86400000);
-            
-            if (!dates.includes(todayBD) && !dates.includes(yesterdayBD)) {
-                return 0;
-            }
-            
-            for (let i = 0; i < dates.length - 1; i++) {
-                const current = new Date(dates[i]);
-                const next = new Date(dates[i + 1]);
-                const diffDays = Math.floor((current - next) / (1000 * 60 * 60 * 24));
-                
-                if (diffDays === 1) {
+            const repos = await this.getUserRepos(username);
+            const today = new Date();
+
+            let streak = 0;
+
+            for (let i = 0; i < 30; i++) {
+                const day = new Date(today.getTime() - i * 86400000);
+
+                const since = new Date(day.setUTCHours(0,0,0,0)).toISOString();
+                const until = new Date(day.setUTCHours(23,59,59,999)).toISOString();
+
+                let commits = 0;
+
+                for (const repo of repos) {
+                    commits += await this.getRepoCommits(
+                        repo.full_name,
+                        username,
+                        since,
+                        until
+                    );
+                }
+
+                if (commits > 0) {
                     streak++;
                 } else {
                     break;
                 }
             }
-            
+
             return streak;
-        } catch (error) {
-            console.error(`Error fetching streak for ${username}:`, error.message);
+
+        } catch (err) {
+            console.error(`Streak error:`, err.message);
             return 0;
         }
     }
