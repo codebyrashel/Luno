@@ -186,11 +186,11 @@
       }
     ],
     "totalXp": 2567,
-    "weeklyXp": 2567,
+    "weeklyXp": 0,
     "activeBonus": 1
   },
   "_meta": {
-    "weeklyReset": 1776038400000
+    "weeklyReset": 1776643200000
   },
   "1339147340359008397": {
     "sessions": [
@@ -220,7 +220,7 @@
       }
     ],
     "totalXp": 67,
-    "weeklyXp": 67,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -264,7 +264,7 @@
       }
     ],
     "totalXp": 105,
-    "weeklyXp": 105,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -542,7 +542,7 @@
       }
     ],
     "totalXp": 297,
-    "weeklyXp": 297,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -665,7 +665,7 @@
       }
     ],
     "totalXp": 128,
-    "weeklyXp": 128,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -685,7 +685,7 @@
       }
     ],
     "totalXp": 59,
-    "weeklyXp": 59,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -771,7 +771,7 @@
       }
     ],
     "totalXp": 117,
-    "weeklyXp": 117,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -791,7 +791,7 @@
       }
     ],
     "totalXp": 8,
-    "weeklyXp": 8,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   },
@@ -818,7 +818,7 @@
       }
     ],
     "totalXp": 3,
-    "weeklyXp": 3,
+    "weeklyXp": 0,
     "active": null,
     "activeBonus": 1
   }
