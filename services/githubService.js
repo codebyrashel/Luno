@@ -2,14 +2,14 @@ const { spawn } = require("child_process");
 
 class GitHubService {
     constructor() {
-        // No baseURL - use full URLs directly
+        this.userAgent = "Luno-Bot/1.0";
     }
 
     async fetchJSON(url) {
         try {
             const response = await fetch(url, {
                 headers: {
-                    "User-Agent": "Luno-Bot/1.0",
+                    "User-Agent": this.userAgent,
                     "Accept": "application/vnd.github.v3+json"
                 }
             });
@@ -17,13 +17,12 @@ class GitHubService {
             if (!response.ok) {
                 if (response.status === 404) return null;
                 if (response.status === 403) {
-                    const text = await response.text();
-                    if (text.includes("rate limit")) {
+                    const remaining = response.headers.get("X-RateLimit-Remaining");
+                    if (remaining === "0") {
                         console.error("GitHub API rate limit exceeded");
-                        return null;
                     }
                 }
-                throw new Error(`HTTP ${response.status}`);
+                return null;
             }
 
             return await response.json();
@@ -33,34 +32,84 @@ class GitHubService {
         }
     }
 
-    async getUserEvents(username) {
-        const url = `https://api.github.com/users/${username}/events`;
-        const events = await this.fetchJSON(url);
-        return events || [];
+    async getAllRepos(username) {
+        let page = 1;
+        let allRepos = [];
+        
+        while (true) {
+            const url = `https://api.github.com/users/${username}/repos?per_page=100&page=${page}`;
+            const repos = await this.fetchJSON(url);
+            
+            if (!repos || repos.length === 0) break;
+            
+            allRepos = allRepos.concat(repos);
+            page++;
+        }
+        
+        return allRepos;
+    }
+
+    async getCommitsForRepo(repoFullName, username, since, until) {
+        let page = 1;
+        let allCommits = [];
+        
+        while (true) {
+            const url = `https://api.github.com/repos/${repoFullName}/commits?author=${username}&since=${since}&until=${until}&per_page=100&page=${page}`;
+            const commits = await this.fetchJSON(url);
+            
+            if (!commits || commits.length === 0) break;
+            
+            allCommits = allCommits.concat(commits);
+            page++;
+        }
+        
+        return allCommits;
+    }
+
+    getBangladeshDateRange() {
+        const now = new Date();
+        const bdOffset = 6 * 60 * 60 * 1000;
+        
+        const startBD = new Date(now.getTime() + bdOffset);
+        startBD.setUTCHours(0, 0, 0, 0);
+        const startUTC = new Date(startBD.getTime() - bdOffset);
+        
+        const endBD = new Date(now.getTime() + bdOffset);
+        endBD.setUTCHours(23, 59, 59, 999);
+        const endUTC = new Date(endBD.getTime() - bdOffset);
+        
+        return {
+            since: startUTC.toISOString(),
+            until: endUTC.toISOString()
+        };
     }
 
     async getTodayCommits(username) {
         try {
-            const events = await this.getUserEvents(username);
-            const today = new Date();
-            const bangladeshDate = new Date(today.getTime() + 6 * 60 * 60 * 1000);
-            const todayStr = bangladeshDate.toISOString().split('T')[0];
+            console.log(`[DEBUG] Fetching today's commits for ${username}...`);
+            
+            const repos = await this.getAllRepos(username);
+            if (!repos.length) {
+                console.log(`[DEBUG] No repos found for ${username}`);
+                return 0;
+            }
+            
+            const { since, until } = this.getBangladeshDateRange();
+            console.log(`[DEBUG] Date range: ${since} to ${until}`);
             
             let totalCommits = 0;
             
-            for (const event of events) {
-                if (event.type === "PushEvent") {
-                    const eventDate = new Date(event.created_at);
-                    const eventBD = new Date(eventDate.getTime() + 6 * 60 * 60 * 1000);
-                    const eventDateStr = eventBD.toISOString().split('T')[0];
-                    
-                    if (eventDateStr === todayStr) {
-                        const commits = event.payload.commits || [];
-                        totalCommits += commits.length;
-                    }
+            for (const repo of repos) {
+                const commits = await this.getCommitsForRepo(repo.full_name, username, since, until);
+                totalCommits += commits.length;
+                if (commits.length > 0) {
+                    console.log(`[DEBUG] ${repo.full_name}: ${commits.length} commits today`);
                 }
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
             
+            console.log(`[DEBUG] Total commits today: ${totalCommits}`);
             return totalCommits;
         } catch (err) {
             console.error(`Error in getTodayCommits: ${err.message}`);
@@ -70,22 +119,25 @@ class GitHubService {
 
     async getWeeklyCommits(username) {
         try {
-            const events = await this.getUserEvents(username);
+            console.log(`[DEBUG] Fetching weekly commits for ${username}...`);
+            
+            const repos = await this.getAllRepos(username);
+            if (!repos.length) return 0;
+            
             const weekAgo = new Date();
             weekAgo.setDate(weekAgo.getDate() - 7);
+            const since = weekAgo.toISOString();
+            const until = new Date().toISOString();
             
             let totalCommits = 0;
             
-            for (const event of events) {
-                if (event.type === "PushEvent") {
-                    const eventDate = new Date(event.created_at);
-                    if (eventDate >= weekAgo) {
-                        const commits = event.payload.commits || [];
-                        totalCommits += commits.length;
-                    }
-                }
+            for (const repo of repos) {
+                const commits = await this.getCommitsForRepo(repo.full_name, username, since, until);
+                totalCommits += commits.length;
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
             
+            console.log(`[DEBUG] Total weekly commits: ${totalCommits}`);
             return totalCommits;
         } catch (err) {
             console.error(`Error in getWeeklyCommits: ${err.message}`);
@@ -95,42 +147,38 @@ class GitHubService {
 
     async getContributionStreak(username) {
         try {
-            const events = await this.getUserEvents(username);
-            const pushDates = new Set();
+            console.log(`[DEBUG] Calculating streak for ${username}...`);
             
-            for (const event of events) {
-                if (event.type === "PushEvent") {
-                    const eventBD = new Date(new Date(event.created_at).getTime() + 6 * 60 * 60 * 1000);
-                    const dateStr = eventBD.toISOString().split('T')[0];
-                    pushDates.add(dateStr);
-                }
-            }
+            const repos = await this.getAllRepos(username);
+            if (!repos.length) return 0;
             
-            const dates = Array.from(pushDates).sort().reverse();
-            if (dates.length === 0) return 0;
-            
-            let streak = 1;
+            let streak = 0;
             const today = new Date();
-            const todayBD = new Date(today.getTime() + 6 * 60 * 60 * 1000).toISOString().split('T')[0];
-            const yesterday = new Date(today.getTime() - 86400000);
-            const yesterdayBD = new Date(yesterday.getTime() + 6 * 60 * 60 * 1000).toISOString().split('T')[0];
             
-            if (!dates.includes(todayBD) && !dates.includes(yesterdayBD)) {
-                return 0;
-            }
-            
-            for (let i = 0; i < dates.length - 1; i++) {
-                const current = new Date(dates[i]);
-                const next = new Date(dates[i + 1]);
-                const diff = Math.floor((current - next) / (1000 * 60 * 60 * 24));
+            for (let i = 0; i < 365; i++) {
+                const day = new Date(today);
+                day.setDate(today.getDate() - i);
                 
-                if (diff === 1) {
+                const startUTC = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, 0, 0));
+                const endUTC = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 23, 59, 59));
+                
+                let commitsToday = 0;
+                
+                for (const repo of repos) {
+                    const commits = await this.getCommitsForRepo(repo.full_name, username, startUTC.toISOString(), endUTC.toISOString());
+                    commitsToday += commits.length;
+                }
+                
+                if (commitsToday > 0) {
                     streak++;
                 } else {
                     break;
                 }
+                
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
             
+            console.log(`[DEBUG] Current streak: ${streak} days`);
             return streak;
         } catch (err) {
             console.error(`Error in getContributionStreak: ${err.message}`);

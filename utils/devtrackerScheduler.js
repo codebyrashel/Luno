@@ -229,7 +229,7 @@ function scheduleDevTracker(client) {
     console.log("- Shame messages and daily reports will be sent once at midnight (Bangladesh Time)");
     console.log("- Current UTC time: " + new Date().toUTCString());
     
-    setTimeout(() => forceCheckCommits(client), 5000);
+    // setTimeout(() => forceCheckCommits(client), 5000);
 }
 
 module.exports = { 
