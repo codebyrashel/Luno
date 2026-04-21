@@ -4,31 +4,22 @@ class GitHubService {
     }
 
     async fetchJSON(url) {
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    "User-Agent": "Luno-Bot",
-                    "Accept": "application/vnd.github.v3+json"
-                }
-            });
-
-            if (!response.ok) {
-                console.error(`GitHub API Error ${response.status} for ${url}`);
-                throw new Error(`GitHub API Error ${response.status}`);
+        const response = await fetch(url, {
+            headers: {
+                "User-Agent": "Luno-Bot",
+                "Accept": "application/vnd.github.v3+json"
             }
+        });
 
-            return await response.json();
-        } catch (err) {
-            console.error(`Fetch error for ${url}:`, err.message);
-            throw err;
+        if (!response.ok) {
+            throw new Error(`GitHub API Error ${response.status}`);
         }
+
+        return response.json();
     }
 
-    // Get Bangladesh day range in ISO (UTC-safe)
     getTodayRangeBD() {
         const now = new Date();
-
-        // Convert to Bangladesh time
         const bd = new Date(now.getTime() + 6 * 60 * 60 * 1000);
 
         const start = new Date(Date.UTC(
@@ -54,9 +45,7 @@ class GitHubService {
     async getUserRepos(username) {
         try {
             const url = `${this.baseURL}/users/${username}/repos?per_page=100`;
-            console.log(`[DEBUG] Fetching repos from: ${url}`);
             const repos = await this.fetchJSON(url);
-            console.log(`[DEBUG] Found ${repos.length} repos for ${username}`);
             return repos;
         } catch (err) {
             console.error(`Repo fetch error for ${username}:`, err.message);
@@ -70,45 +59,24 @@ class GitHubService {
             const commits = await this.fetchJSON(url);
             return commits.length;
         } catch (err) {
-            console.error(`Commit fetch error for ${repoFullName}:`, err.message);
             return 0;
         }
     }
 
     async getTodayCommits(username) {
         try {
-            console.log(`[DEBUG] Accurate commit fetch for ${username}`);
-
             const { since, until } = this.getTodayRangeBD();
-            console.log(`[DEBUG] Date range: ${since} to ${until}`);
-
             const repos = await this.getUserRepos(username);
 
-            if (!repos.length) {
-                console.log(`[DEBUG] No repos found for ${username}`);
-                return 0;
-            }
+            if (!repos.length) return 0;
 
             let total = 0;
-
             for (const repo of repos) {
-                const count = await this.getRepoCommits(
-                    repo.full_name,
-                    username,
-                    since,
-                    until
-                );
+                const count = await this.getRepoCommits(repo.full_name, username, since, until);
                 total += count;
-                if (count > 0) {
-                    console.log(`[DEBUG] ${repo.full_name}: ${count} commits today`);
-                }
             }
-
-            console.log(`[DEBUG] ${username} → ${total} commits today`);
             return total;
-
         } catch (err) {
-            console.error(`Error in getTodayCommits:`, err.message);
             return 0;
         }
     }
@@ -120,43 +88,24 @@ class GitHubService {
             const since = weekAgo.toISOString();
             const until = now.toISOString();
 
-            console.log(`[DEBUG] Weekly range: ${since} to ${until}`);
-
             const repos = await this.getUserRepos(username);
-
-            if (!repos.length) {
-                return 0;
-            }
+            if (!repos.length) return 0;
 
             let total = 0;
-
             for (const repo of repos) {
-                const count = await this.getRepoCommits(
-                    repo.full_name,
-                    username,
-                    since,
-                    until
-                );
+                const count = await this.getRepoCommits(repo.full_name, username, since, until);
                 total += count;
             }
-
-            console.log(`[DEBUG] ${username} → ${total} commits this week`);
             return total;
-
         } catch (err) {
-            console.error(`Weekly error:`, err.message);
             return 0;
         }
     }
 
     async getContributionStreak(username) {
         try {
-            console.log(`[DEBUG] Calculating streak for ${username}`);
             const repos = await this.getUserRepos(username);
-
-            if (!repos.length) {
-                return 0;
-            }
+            if (!repos.length) return 0;
 
             let streak = 0;
             const today = new Date();
@@ -170,14 +119,8 @@ class GitHubService {
                 const until = new Date(day.getTime() + 86400000 - 1).toISOString();
 
                 let commits = 0;
-
                 for (const repo of repos) {
-                    commits += await this.getRepoCommits(
-                        repo.full_name,
-                        username,
-                        since,
-                        until
-                    );
+                    commits += await this.getRepoCommits(repo.full_name, username, since, until);
                 }
 
                 if (commits > 0) {
@@ -186,12 +129,8 @@ class GitHubService {
                     break;
                 }
             }
-
-            console.log(`[DEBUG] ${username} → ${streak} day streak`);
             return streak;
-
         } catch (err) {
-            console.error(`Streak error:`, err.message);
             return 0;
         }
     }
