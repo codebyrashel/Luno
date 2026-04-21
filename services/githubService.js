@@ -1,4 +1,4 @@
-const https = require("https");
+const { spawn } = require("child_process");
 
 class GitHubService {
     constructor() {
@@ -14,79 +14,101 @@ class GitHubService {
         return `${year}-${month}-${day}`;
     }
 
-    getBangladeshDateTime(timestamp = Date.now()) {
-        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
-        const year = bangladeshTime.getUTCFullYear();
-        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
-        
-        let hours = bangladeshTime.getUTCHours();
-        const minutes = String(bangladeshTime.getUTCMinutes()).padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12; // Convert 0 to 12
-        
-        return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
-    }
-
-    async fetchJSON(url) {
+    getUserEvents(username) {
         return new Promise((resolve, reject) => {
-            https.get(url, (response) => {
-                let data = "";
-                
-                response.on("data", (chunk) => {
-                    data += chunk;
-                });
-                
-                response.on("end", () => {
-                    try {
-                        const json = JSON.parse(data);
-                        if (response.statusCode === 404) {
-                            reject(new Error("Not Found"));
-                            return;
-                        }
-                        if (response.statusCode === 403 && data.includes("rate limit")) {
-                            reject(new Error("API rate limit exceeded"));
-                            return;
-                        }
-                        if (response.statusCode !== 200) {
-                            reject(new Error(`HTTP ${response.statusCode}: ${data.substring(0, 100)}`));
-                            return;
-                        }
-                        resolve(json);
-                    } catch (e) {
-                        reject(new Error(`Failed to parse JSON: ${e.message}`));
+            const curl = spawn("curl", [
+                "-s",
+                "--connect-timeout", "10",
+                "--max-time", "15",
+                `https://api.github.com/users/${username}/events`
+            ]);
+
+            let output = "";
+            let errorOutput = "";
+            
+            curl.stdout.on("data", (data) => {
+                output += data.toString();
+            });
+            
+            curl.stderr.on("data", (data) => {
+                errorOutput += data.toString();
+            });
+
+            curl.on("close", (code) => {
+                if (code !== 0) {
+                    console.error(`GitHub API curl error code ${code}: ${errorOutput}`);
+                    reject(new Error(`Failed to fetch GitHub events`));
+                    return;
+                }
+
+                try {
+                    const events = JSON.parse(output);
+                    if (events.message === "Not Found") {
+                        reject(new Error(`User ${username} not found on GitHub`));
+                        return;
                     }
-                });
-            }).on("error", (err) => {
+                    if (events.message === "API rate limit exceeded") {
+                        reject(new Error(`GitHub API rate limit exceeded. Try again later.`));
+                        return;
+                    }
+                    console.log(`[DEBUG] Fetched ${events.length} events for ${username}`);
+                    resolve(events);
+                } catch (e) {
+                    console.error(`[DEBUG] Failed to parse JSON: ${output.substring(0, 200)}`);
+                    reject(new Error(`Failed to parse GitHub response`));
+                }
+            });
+
+            curl.on("error", (err) => {
                 reject(new Error(`Network error: ${err.message}`));
             });
         });
     }
 
-    async getUserEvents(username) {
-        try {
-            const url = `https://api.github.com/users/${username}/events`;
-            console.log(`[DEBUG] Fetching events from: ${url}`);
-            const events = await this.fetchJSON(url);
-            console.log(`[DEBUG] Fetched ${events.length} events for ${username}`);
-            return events;
-        } catch (error) {
-            console.error(`Error fetching events for ${username}:`, error.message);
-            throw error;
-        }
-    }
-
     async getCommitsBetween(repo, before, head) {
-        try {
-            const url = `https://api.github.com/repos/${repo}/compare/${before}...${head}`;
-            const data = await this.fetchJSON(url);
-            const commitCount = data.total_commits || data.commits?.length || 0;
-            return commitCount;
-        } catch (error) {
-            console.error(`Compare API error for ${repo}:`, error.message);
-            return 0;
-        }
+        return new Promise((resolve, reject) => {
+            const curl = spawn("curl", [
+                "-s",
+                "--connect-timeout", "10",
+                "--max-time", "15",
+                `https://api.github.com/repos/${repo}/compare/${before}...${head}`
+            ]);
+
+            let output = "";
+            let errorOutput = "";
+            
+            curl.stdout.on("data", (data) => {
+                output += data.toString();
+            });
+            
+            curl.stderr.on("data", (data) => {
+                errorOutput += data.toString();
+            });
+
+            curl.on("close", (code) => {
+                if (code !== 0) {
+                    console.error(`Compare API error: ${errorOutput}`);
+                    reject(new Error(`Failed to fetch compare data`));
+                    return;
+                }
+
+                try {
+                    const data = JSON.parse(output);
+                    if (data.message === "Not Found") {
+                        resolve(0);
+                        return;
+                    }
+                    const commitCount = data.total_commits || data.commits?.length || 0;
+                    resolve(commitCount);
+                } catch (e) {
+                    reject(new Error(`Failed to parse compare response`));
+                }
+            });
+
+            curl.on("error", (err) => {
+                reject(new Error(`Network error: ${err.message}`));
+            });
+        });
     }
 
     async getTodayCommits(username) {
@@ -101,6 +123,7 @@ class GitHubService {
             let totalCommits = 0;
             let pushCount = 0;
             
+            // Filter push events first
             const pushEvents = events.filter(event => event.type === "PushEvent");
             console.log(`[DEBUG] Push events found: ${pushEvents.length}`);
             
@@ -115,6 +138,7 @@ class GitHubService {
                     
                     console.log(`[DEBUG] Processing push - repo: ${repo}, before: ${before.substring(0, 7)}..., head: ${head.substring(0, 7)}...`);
                     
+                    // Skip if before is all zeros (new branch/first push)
                     if (before === "0000000000000000000000000000000000000000") {
                         console.log(`[DEBUG] Skipping - new branch creation`);
                         continue;
@@ -176,6 +200,7 @@ class GitHubService {
             
             if (pushEvents.length === 0) return 0;
             
+            // Get unique dates of pushes (in Bangladesh timezone)
             const dates = [...new Set(pushEvents.map(event => 
                 this.getBangladeshDate(new Date(event.created_at).getTime())
             ))];
@@ -186,10 +211,12 @@ class GitHubService {
             const todayBD = this.getBangladeshDate();
             const yesterdayBD = this.getBangladeshDate(Date.now() - 86400000);
             
+            // Check if there's any activity today or yesterday
             if (!dates.includes(todayBD) && !dates.includes(yesterdayBD)) {
                 return 0;
             }
             
+            // Calculate consecutive days
             for (let i = 0; i < dates.length - 1; i++) {
                 const current = new Date(dates[i]);
                 const next = new Date(dates[i + 1]);
