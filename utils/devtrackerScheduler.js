@@ -1,37 +1,69 @@
 const devTrackerService = require("../services/devTrackerService");
 const githubService = require("../services/githubService");
 
-// Bangladesh is UTC+6, so we subtract 6 hours to get UTC time
-// Example: 9 AM Bangladesh = 3 AM UTC
-function getUTCHourForBangladeshTime(bangladeshHour) {
-    let utcHour = bangladeshHour - 6;
-    if (utcHour < 0) {
-        utcHour += 24;
+// Track which reminders have been sent today
+let lastReminderDate = null;
+let sentRemindersToday = {
+    morning: false,
+    afternoon: false,
+    evening: false,
+    night: false,
+    midnight: false
+};
+
+function resetReminderTracking() {
+    const today = new Date().toISOString().split('T')[0];
+    if (lastReminderDate !== today) {
+        lastReminderDate = today;
+        sentRemindersToday = {
+            morning: false,
+            afternoon: false,
+            evening: false,
+            night: false,
+            midnight: false
+        };
+        console.log(`[DEBUG] Reminder tracking reset for ${today}`);
     }
-    return utcHour;
 }
 
 async function sendReminders(client) {
+    resetReminderTracking();
+    
     const data = devTrackerService.loadData();
     const now = new Date();
     const currentUTCHour = now.getUTCHours();
+    const currentUTCMinute = now.getUTCMinutes(); 
     
     // Bangladesh reminder times converted to UTC
-    // 9 AM BD = 3 AM UTC
-    // 12 PM BD = 6 AM UTC
-    // 5 PM BD = 11 AM UTC
-    // 8 PM BD = 2 PM UTC
-    const reminderTimesUTC = [3, 6, 11, 14];
+    // 9 AM BD = 3 AM UTC (morning)
+    // 12 PM BD = 6 AM UTC (afternoon)
+    // 5 PM BD = 11 AM UTC (evening)
+    // 8 PM BD = 2 PM UTC (night)
     
-    if (!reminderTimesUTC.includes(currentUTCHour)) return;
+    let reminderType = null;
+    let reminderHourBD = null;
     
-    // Map UTC hour back to Bangladesh hour for the message
-    let bangladeshHour = currentUTCHour + 6;
-    if (bangladeshHour >= 24) {
-        bangladeshHour -= 24;
+    if (currentUTCHour === 3 && currentUTCMinute === 0 && !sentRemindersToday.morning) {
+        reminderType = "morning";
+        reminderHourBD = 9;
+        sentRemindersToday.morning = true;
+    } else if (currentUTCHour === 6 && currentUTCMinute === 0 && !sentRemindersToday.afternoon) {
+        reminderType = "afternoon";
+        reminderHourBD = 12;
+        sentRemindersToday.afternoon = true;
+    } else if (currentUTCHour === 11 && currentUTCMinute === 0 && !sentRemindersToday.evening) {
+        reminderType = "evening";
+        reminderHourBD = 17;
+        sentRemindersToday.evening = true;
+    } else if (currentUTCHour === 14 && currentUTCMinute === 0 && !sentRemindersToday.night) {
+        reminderType = "night";
+        reminderHourBD = 20;
+        sentRemindersToday.night = true;
     }
     
-    console.log(`[DEBUG] UTC hour: ${currentUTCHour}:00 (Bangladesh hour: ${bangladeshHour}:00) - Sending reminder`);
+    if (!reminderType) return;
+    
+    console.log(`[DEBUG] Sending ${reminderType} reminder at UTC ${currentUTCHour}:00 (BD ${reminderHourBD}:00)`);
     
     for (const [guildId, setting] of Object.entries(data.settings)) {
         const reportChannelId = setting.reportChannel;
@@ -40,7 +72,7 @@ async function sendReminders(client) {
         const channel = client.guilds.cache.get(guildId)?.channels.cache.get(reportChannelId);
         if (!channel) continue;
         
-        let reminderText = devTrackerService.getReminderMessage(bangladeshHour);
+        let reminderText = devTrackerService.getReminderMessage(reminderHourBD);
         let mentionedUsers = [];
         let mentionedNames = [];
         
@@ -60,7 +92,7 @@ async function sendReminders(client) {
         if (mentionedUsers.length > 0) {
             reminderText += `\n\nUsers who haven't committed yet:\n${mentionedUsers.join(", ")}`;
             await channel.send(reminderText);
-            console.log(`Reminder sent to guild ${guildId} at ${bangladeshHour}:00 BD time - Mentioned: ${mentionedNames.join(", ")}`);
+            console.log(`${reminderType} reminder sent to guild ${guildId} - Mentioned: ${mentionedNames.join(", ")}`);
         } else {
             reminderText += `\n\nEveryone has committed today! Great job!`;
             await channel.send(reminderText);
@@ -69,15 +101,18 @@ async function sendReminders(client) {
 }
 
 async function sendShameMessages(client) {
+    resetReminderTracking();
+    
     const data = devTrackerService.loadData();
     const now = new Date();
     const currentUTCHour = now.getUTCHours();
+    const currentUTCMinute = now.getUTCMinutes(); 
     
     // Midnight Bangladesh (12 AM BD) = 6 PM UTC (18:00)
-    // We check at 6 PM UTC which is midnight in Bangladesh
-    if (currentUTCHour !== 18) return;
+    if (currentUTCHour !== 18 || currentUTCMinute !== 0 || sentRemindersToday.midnight) return;
     
-    console.log(`[DEBUG] UTC hour: ${currentUTCHour}:00 - Sending shame messages (Bangladesh midnight)`);
+    sentRemindersToday.midnight = true;
+    console.log(`[DEBUG] Sending shame messages at UTC ${currentUTCHour}:00 (Bangladesh midnight)`);
     
     for (const [guildId, setting] of Object.entries(data.settings)) {
         const reportChannelId = setting.reportChannel;
@@ -110,14 +145,17 @@ async function sendShameMessages(client) {
 }
 
 async function sendDailyReports(client) {
+    resetReminderTracking();
+    
     const data = devTrackerService.loadData();
     const now = new Date();
     const currentUTCHour = now.getUTCHours();
+    const currentUTCMinute = now.getUTCMinutes(); 
     
     // Midnight Bangladesh (12 AM BD) = 6 PM UTC (18:00)
-    if (currentUTCHour !== 18) return;
+    if (currentUTCHour !== 18 || currentUTCMinute !== 0) return;
     
-    console.log(`[DEBUG] UTC hour: ${currentUTCHour}:00 - Sending daily reports (Bangladesh midnight)`);
+    console.log(`[DEBUG] Sending daily reports at UTC ${currentUTCHour}:00 (Bangladesh midnight)`);
     
     for (const [guildId, setting] of Object.entries(data.settings)) {
         const trackerChannelId = setting.trackerChannel;
@@ -179,18 +217,16 @@ async function forceCheckCommits(client) {
 function scheduleDevTracker(client) {
     console.log("Starting Dev Tracker scheduler...");
     
-    // Check every minute for reminders (more precise timing)
+    // Check every minute for reminders (but will only send once per day per type)
     setInterval(() => sendReminders(client), 60 * 1000);
-    
-    // Check every minute for midnight events
     setInterval(() => {
         sendShameMessages(client);
         sendDailyReports(client);
     }, 60 * 1000);
     
     console.log("Dev tracker scheduler started");
-    console.log("- Reminders will be sent at 9 AM, 12 PM, 5 PM, 8 PM (Bangladesh Time)");
-    console.log("- Shame messages and daily reports will be sent at midnight (Bangladesh Time)");
+    console.log("- Reminders will be sent once at 9 AM, 12 PM, 5 PM, 8 PM (Bangladesh Time)");
+    console.log("- Shame messages and daily reports will be sent once at midnight (Bangladesh Time)");
     console.log("- Current UTC time: " + new Date().toUTCString());
     
     setTimeout(() => forceCheckCommits(client), 5000);
