@@ -1,6 +1,9 @@
+const { spawn } = require("child_process");
+
 class GitHubService {
     constructor() {
-        this.baseURL = "https://api.github.com";
+        // Bangladesh timezone offset (UTC+6)
+        this.timezoneOffset = 6 * 60 * 60 * 1000;
     }
 
     async fetchJSON(url) {
