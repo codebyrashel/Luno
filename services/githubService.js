@@ -1,3 +1,5 @@
+const { spawn } = require("child_process");
+
 class GitHubService {
     constructor() {
         // No baseURL - use full URLs directly
