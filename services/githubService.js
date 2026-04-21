@@ -1,6 +1,18 @@
 const { spawn } = require("child_process");
 
 class GitHubService {
+    constructor() {
+        this.timezoneOffset = 6 * 60 * 60 * 1000; // Bangladesh UTC+6
+    }
+
+    getBangladeshDate(timestamp = Date.now()) {
+        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
+        const year = bangladeshTime.getUTCFullYear();
+        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     async fetchJSON(url) {
         const response = await fetch(url, {
             headers: {
@@ -17,17 +29,13 @@ class GitHubService {
             const events = await this.fetchJSON(`https://api.github.com/users/${username}/events`);
             if (!events) return 0;
 
-            // Get today's date in Bangladesh time (UTC+6)
-            const now = new Date();
-            const bdNow = new Date(now.getTime() + 6 * 60 * 60 * 1000);
-            const todayStr = bdNow.toISOString().split('T')[0];
+            const todayStr = this.getBangladeshDate();
             
             let totalCommits = 0;
 
             for (const event of events) {
                 if (event.type === "PushEvent") {
-                    // Check if event happened today in BD time
-                    const eventBD = new Date(new Date(event.created_at).getTime() + 6 * 60 * 60 * 1000);
+                    const eventBD = new Date(new Date(event.created_at).getTime() + this.timezoneOffset);
                     const eventDateStr = eventBD.toISOString().split('T')[0];
                     
                     if (eventDateStr === todayStr) {
@@ -35,12 +43,10 @@ class GitHubService {
                         const before = event.payload.before;
                         const head = event.payload.head;
                         
-                        // Skip new branch creation (before is all zeros)
                         if (before === "0000000000000000000000000000000000000000") {
                             continue;
                         }
                         
-                        // Get commit count from Compare API
                         const compareUrl = `https://api.github.com/repos/${repo}/compare/${before}...${head}`;
                         const compareData = await this.fetchJSON(compareUrl);
                         
@@ -53,7 +59,7 @@ class GitHubService {
             
             return totalCommits;
         } catch (err) {
-            console.error(`Error: ${err.message}`);
+            console.error(`Error in getTodayCommits: ${err.message}`);
             return 0;
         }
     }
@@ -105,7 +111,7 @@ class GitHubService {
 
             for (const event of events) {
                 if (event.type === "PushEvent") {
-                    const eventBD = new Date(new Date(event.created_at).getTime() + 6 * 60 * 60 * 1000);
+                    const eventBD = new Date(new Date(event.created_at).getTime() + this.timezoneOffset);
                     const dateStr = eventBD.toISOString().split('T')[0];
                     commitDays.add(dateStr);
                 }
@@ -115,10 +121,10 @@ class GitHubService {
             if (dates.length === 0) return 0;
 
             let streak = 1;
-            const todayBD = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString().split('T')[0];
-            const yesterdayBD = new Date(Date.now() + 6 * 60 * 60 * 1000 - 86400000).toISOString().split('T')[0];
+            const todayStr = this.getBangladeshDate();
+            const yesterdayStr = this.getBangladeshDate(Date.now() - 86400000);
 
-            if (!dates.includes(todayBD) && !dates.includes(yesterdayBD)) {
+            if (!dates.includes(todayStr) && !dates.includes(yesterdayStr)) {
                 return 0;
             }
 

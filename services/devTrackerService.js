@@ -12,10 +12,11 @@ function getBangladeshDateTime(timestamp = Date.now()) {
     const year = bangladeshTime.getUTCFullYear();
     const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
     const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
-    const hours = String(bangladeshTime.getUTCHours()).padStart(2, '0');
+    let hours = bangladeshTime.getUTCHours();
     const minutes = String(bangladeshTime.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(bangladeshTime.getUTCSeconds()).padStart(2, '0');
-    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
 }
 
 function loadData() {
