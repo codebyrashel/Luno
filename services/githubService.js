@@ -3,7 +3,7 @@ const { spawn } = require("child_process");
 class GitHubService {
     constructor() {
         // Bangladesh timezone offset (UTC+6)
-        this.timezoneOffset = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+        this.timezoneOffset = 6 * 60 * 60 * 1000;
     }
 
     getBangladeshDate(timestamp = Date.now()) {
@@ -12,17 +12,6 @@ class GitHubService {
         const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
         const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
-    }
-
-    getBangladeshDateTime(timestamp = Date.now()) {
-        const bangladeshTime = new Date(timestamp + this.timezoneOffset);
-        const year = bangladeshTime.getUTCFullYear();
-        const month = String(bangladeshTime.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(bangladeshTime.getUTCDate()).padStart(2, '0');
-        const hours = String(bangladeshTime.getUTCHours()).padStart(2, '0');
-        const minutes = String(bangladeshTime.getUTCMinutes()).padStart(2, '0');
-        const seconds = String(bangladeshTime.getUTCSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 
     getUserEvents(username) {
@@ -73,22 +62,83 @@ class GitHubService {
         });
     }
 
+    async getCommitsBetween(repo, before, head) {
+        return new Promise((resolve, reject) => {
+            const curl = spawn("curl", [
+                "-s",
+                "--connect-timeout", "10",
+                "--max-time", "15",
+                `https://api.github.com/repos/${repo}/compare/${before}...${head}`
+            ]);
+
+            let output = "";
+            let errorOutput = "";
+            
+            curl.stdout.on("data", (data) => {
+                output += data.toString();
+            });
+            
+            curl.stderr.on("data", (data) => {
+                errorOutput += data.toString();
+            });
+
+            curl.on("close", (code) => {
+                if (code !== 0) {
+                    reject(new Error(`Failed to fetch compare data`));
+                    return;
+                }
+
+                try {
+                    const data = JSON.parse(output);
+                    if (data.message === "Not Found") {
+                        resolve(0);
+                        return;
+                    }
+                    // Return the number of commits in this push
+                    resolve(data.total_commits || data.commits?.length || 0);
+                } catch (e) {
+                    reject(new Error(`Failed to parse compare response`));
+                }
+            });
+
+            curl.on("error", (err) => {
+                reject(new Error(`Network error: ${err.message}`));
+            });
+        });
+    }
+
     async getTodayCommits(username) {
         try {
             const events = await this.getUserEvents(username);
             const todayBD = this.getBangladeshDate();
             
-            let commitCount = 0;
+            let totalCommits = 0;
+            let pushCount = 0;
+            
             for (const event of events) {
                 if (event.type === "PushEvent") {
+                    // Convert event time to Bangladesh timezone
                     const eventDate = this.getBangladeshDate(new Date(event.created_at).getTime());
+                    
                     if (eventDate === todayBD) {
-                        commitCount += event.payload.commits?.length || 0;
+                        const repo = event.repo.name;
+                        const before = event.payload.before;
+                        const head = event.payload.head;
+                        
+                        // Skip if before is all zeros (new branch/first push)
+                        if (before === "0000000000000000000000000000000000000000") {
+                            continue;
+                        }
+                        
+                        const commitCount = await this.getCommitsBetween(repo, before, head);
+                        totalCommits += commitCount;
+                        pushCount++;
                     }
                 }
             }
-            console.log(`[DEBUG] ${username}: ${commitCount} commits today (Bangladesh date: ${todayBD})`);
-            return commitCount;
+            
+            console.log(`[DEBUG] ${username}: ${totalCommits} commits from ${pushCount} push(es) on ${todayBD}`);
+            return totalCommits;
         } catch (error) {
             console.error(`Error fetching commits for ${username}:`, error.message);
             return 0;
@@ -101,16 +151,28 @@ class GitHubService {
             const nowBD = new Date(Date.now() + this.timezoneOffset);
             const weekAgoBD = new Date(nowBD.getTime() - 7 * 24 * 60 * 60 * 1000);
             
-            let commitCount = 0;
+            let totalCommits = 0;
+            
             for (const event of events) {
                 if (event.type === "PushEvent") {
                     const eventDate = new Date(new Date(event.created_at).getTime() + this.timezoneOffset);
+                    
                     if (eventDate >= weekAgoBD) {
-                        commitCount += event.payload.commits?.length || 0;
+                        const repo = event.repo.name;
+                        const before = event.payload.before;
+                        const head = event.payload.head;
+                        
+                        if (before === "0000000000000000000000000000000000000000") {
+                            continue;
+                        }
+                        
+                        const commitCount = await this.getCommitsBetween(repo, before, head);
+                        totalCommits += commitCount;
                     }
                 }
             }
-            return commitCount;
+            
+            return totalCommits;
         } catch (error) {
             console.error(`Error fetching weekly commits for ${username}:`, error.message);
             return 0;
@@ -124,6 +186,7 @@ class GitHubService {
             
             if (pushEvents.length === 0) return 0;
             
+            // Get unique dates of pushes (in Bangladesh timezone)
             const dates = [...new Set(pushEvents.map(event => 
                 this.getBangladeshDate(new Date(event.created_at).getTime())
             ))];
@@ -134,10 +197,12 @@ class GitHubService {
             const todayBD = this.getBangladeshDate();
             const yesterdayBD = this.getBangladeshDate(Date.now() - 86400000);
             
+            // Check if there's any activity today or yesterday
             if (!dates.includes(todayBD) && !dates.includes(yesterdayBD)) {
                 return 0;
             }
             
+            // Calculate consecutive days
             for (let i = 0; i < dates.length - 1; i++) {
                 const current = new Date(dates[i]);
                 const next = new Date(dates[i + 1]);
@@ -149,6 +214,7 @@ class GitHubService {
                     break;
                 }
             }
+            
             return streak;
         } catch (error) {
             console.error(`Error fetching streak for ${username}:`, error.message);
