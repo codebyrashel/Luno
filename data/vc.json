@@ -662,11 +662,23 @@
         "end": 1776533466977,
         "xp": 0,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791429965,
+        "end": 1776794775008,
+        "xp": 55,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776794775009,
+        "end": 1776794776464,
+        "xp": 0,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 128,
-    "weeklyXp": 0,
-    "active": 1776791429965,
+    "totalXp": 183,
+    "weeklyXp": 55,
+    "active": null,
     "activeBonus": 1
   },
   "729214501085511751": {

@@ -36,6 +36,7 @@ class GitHubService {
 
             curl.on("close", (code) => {
                 if (code !== 0) {
+                    console.error(`GitHub API curl error code ${code}: ${errorOutput}`);
                     reject(new Error(`Failed to fetch GitHub events`));
                     return;
                 }
@@ -50,8 +51,10 @@ class GitHubService {
                         reject(new Error(`GitHub API rate limit exceeded. Try again later.`));
                         return;
                     }
+                    console.log(`[DEBUG] Fetched ${events.length} events for ${username}`);
                     resolve(events);
                 } catch (e) {
+                    console.error(`[DEBUG] Failed to parse JSON: ${output.substring(0, 200)}`);
                     reject(new Error(`Failed to parse GitHub response`));
                 }
             });
@@ -84,6 +87,7 @@ class GitHubService {
 
             curl.on("close", (code) => {
                 if (code !== 0) {
+                    console.error(`Compare API error: ${errorOutput}`);
                     reject(new Error(`Failed to fetch compare data`));
                     return;
                 }
@@ -94,8 +98,8 @@ class GitHubService {
                         resolve(0);
                         return;
                     }
-                    // Return the number of commits in this push
-                    resolve(data.total_commits || data.commits?.length || 0);
+                    const commitCount = data.total_commits || data.commits?.length || 0;
+                    resolve(commitCount);
                 } catch (e) {
                     reject(new Error(`Failed to parse compare response`));
                 }
@@ -109,31 +113,41 @@ class GitHubService {
 
     async getTodayCommits(username) {
         try {
+            console.log(`[DEBUG] Fetching commits for ${username}...`);
             const events = await this.getUserEvents(username);
             const todayBD = this.getBangladeshDate();
+            
+            console.log(`[DEBUG] Today's Bangladesh date: ${todayBD}`);
+            console.log(`[DEBUG] Total events received: ${events.length}`);
             
             let totalCommits = 0;
             let pushCount = 0;
             
-            for (const event of events) {
-                if (event.type === "PushEvent") {
-                    // Convert event time to Bangladesh timezone
-                    const eventDate = this.getBangladeshDate(new Date(event.created_at).getTime());
+            // Filter push events first
+            const pushEvents = events.filter(event => event.type === "PushEvent");
+            console.log(`[DEBUG] Push events found: ${pushEvents.length}`);
+            
+            for (const event of pushEvents) {
+                const eventDate = this.getBangladeshDate(new Date(event.created_at).getTime());
+                console.log(`[DEBUG] Event date: ${eventDate}, repo: ${event.repo.name}`);
+                
+                if (eventDate === todayBD) {
+                    const repo = event.repo.name;
+                    const before = event.payload.before;
+                    const head = event.payload.head;
                     
-                    if (eventDate === todayBD) {
-                        const repo = event.repo.name;
-                        const before = event.payload.before;
-                        const head = event.payload.head;
-                        
-                        // Skip if before is all zeros (new branch/first push)
-                        if (before === "0000000000000000000000000000000000000000") {
-                            continue;
-                        }
-                        
-                        const commitCount = await this.getCommitsBetween(repo, before, head);
-                        totalCommits += commitCount;
-                        pushCount++;
+                    console.log(`[DEBUG] Processing push - repo: ${repo}, before: ${before.substring(0, 7)}..., head: ${head.substring(0, 7)}...`);
+                    
+                    // Skip if before is all zeros (new branch/first push)
+                    if (before === "0000000000000000000000000000000000000000") {
+                        console.log(`[DEBUG] Skipping - new branch creation`);
+                        continue;
                     }
+                    
+                    const commitCount = await this.getCommitsBetween(repo, before, head);
+                    console.log(`[DEBUG] Commits in this push: ${commitCount}`);
+                    totalCommits += commitCount;
+                    pushCount++;
                 }
             }
             
