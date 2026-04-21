@@ -1,6 +1,7 @@
 class GitHubService {
     constructor() {
-        this.baseURL = "https://api.github.com";
+        // Bangladesh timezone offset (UTC+6)
+        this.timezoneOffset = 6 * 60 * 60 * 1000;
     }
 
     async fetchJSON(url) {
@@ -24,32 +25,32 @@ class GitHubService {
         }
     }
 
-    // Get Bangladesh day range in ISO (UTC-safe)
-    getTodayRangeBD() {
-        const now = new Date();
+    async getCommitsBetween(repo, before, head) {
+        return new Promise((resolve, reject) => {
+            const curl = spawn("curl", [
+                "-s",
+                "--connect-timeout", "10",
+                "--max-time", "15",
+                `https://api.github.com/repos/${repo}/compare/${before}...${head}`
+            ]);
 
-        // Convert to Bangladesh time
-        const bd = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+            let output = "";
+            let errorOutput = "";
+            
+            curl.stdout.on("data", (data) => {
+                output += data.toString();
+            });
+            
+            curl.stderr.on("data", (data) => {
+                errorOutput += data.toString();
+            });
 
-        const start = new Date(Date.UTC(
-            bd.getUTCFullYear(),
-            bd.getUTCMonth(),
-            bd.getUTCDate(),
-            0, 0, 0
-        ));
-
-        const end = new Date(Date.UTC(
-            bd.getUTCFullYear(),
-            bd.getUTCMonth(),
-            bd.getUTCDate(),
-            23, 59, 59
-        ));
-
-        return {
-            since: start.toISOString(),
-            until: end.toISOString()
-        };
-    }
+            curl.on("close", (code) => {
+                if (code !== 0) {
+                    console.error(`Compare API error: ${errorOutput}`);
+                    reject(new Error(`Failed to fetch compare data`));
+                    return;
+                }
 
     async getUserRepos(username) {
         try {
@@ -103,12 +104,11 @@ class GitHubService {
                     console.log(`[DEBUG] ${repo.full_name}: ${count} commits today`);
                 }
             }
-
-            console.log(`[DEBUG] ${username} → ${total} commits today`);
-            return total;
-
-        } catch (err) {
-            console.error(`Error in getTodayCommits:`, err.message);
+            
+            console.log(`[DEBUG] ${username}: ${totalCommits} commits from ${pushCount} push(es) on ${todayBD}`);
+            return totalCommits;
+        } catch (error) {
+            console.error(`Error fetching commits for ${username}:`, error.message);
             return 0;
         }
     }
@@ -189,9 +189,8 @@ class GitHubService {
 
             console.log(`[DEBUG] ${username} → ${streak} day streak`);
             return streak;
-
-        } catch (err) {
-            console.error(`Streak error:`, err.message);
+        } catch (error) {
+            console.error(`Error fetching streak for ${username}:`, error.message);
             return 0;
         }
     }
