@@ -1,40 +1,27 @@
-const https = require("https");
-
 class GitHubService {
     constructor() {
         this.baseURL = "https://api.github.com";
     }
 
     async fetchJSON(url) {
-        return new Promise((resolve, reject) => {
-            const options = {
+        try {
+            const response = await fetch(url, {
                 headers: {
                     "User-Agent": "Luno-Bot",
                     "Accept": "application/vnd.github.v3+json"
                 }
-            };
+            });
 
-            https.get(url, options, (res) => {
-                let data = "";
+            if (!response.ok) {
+                console.error(`GitHub API Error ${response.status} for ${url}`);
+                throw new Error(`GitHub API Error ${response.status}`);
+            }
 
-                res.on("data", chunk => data += chunk);
-
-                res.on("end", () => {
-                    try {
-                        const json = JSON.parse(data);
-
-                        if (res.statusCode !== 200) {
-                            return reject(new Error(`GitHub API Error ${res.statusCode}`));
-                        }
-
-                        resolve(json);
-                    } catch (err) {
-                        reject(new Error("Failed to parse JSON"));
-                    }
-                });
-
-            }).on("error", err => reject(err));
-        });
+            return await response.json();
+        } catch (err) {
+            console.error(`Fetch error for ${url}:`, err.message);
+            throw err;
+        }
     }
 
     // Get Bangladesh day range in ISO (UTC-safe)
@@ -67,7 +54,10 @@ class GitHubService {
     async getUserRepos(username) {
         try {
             const url = `${this.baseURL}/users/${username}/repos?per_page=100`;
-            return await this.fetchJSON(url);
+            console.log(`[DEBUG] Fetching repos from: ${url}`);
+            const repos = await this.fetchJSON(url);
+            console.log(`[DEBUG] Found ${repos.length} repos for ${username}`);
+            return repos;
         } catch (err) {
             console.error(`Repo fetch error for ${username}:`, err.message);
             return [];
@@ -76,7 +66,7 @@ class GitHubService {
 
     async getRepoCommits(repoFullName, username, since, until) {
         try {
-            const url = `${this.baseURL}/repos/${repoFullName}/commits?author=${username}&since=${since}&until=${until}`;
+            const url = `${this.baseURL}/repos/${repoFullName}/commits?author=${username}&since=${since}&until=${until}&per_page=100`;
             const commits = await this.fetchJSON(url);
             return commits.length;
         } catch (err) {
@@ -90,17 +80,17 @@ class GitHubService {
             console.log(`[DEBUG] Accurate commit fetch for ${username}`);
 
             const { since, until } = this.getTodayRangeBD();
+            console.log(`[DEBUG] Date range: ${since} to ${until}`);
 
             const repos = await this.getUserRepos(username);
 
             if (!repos.length) {
-                console.log(`[DEBUG] No repos found`);
+                console.log(`[DEBUG] No repos found for ${username}`);
                 return 0;
             }
 
             let total = 0;
 
-            // Sequential to avoid rate limit drama on Railway
             for (const repo of repos) {
                 const count = await this.getRepoCommits(
                     repo.full_name,
@@ -109,6 +99,9 @@ class GitHubService {
                     until
                 );
                 total += count;
+                if (count > 0) {
+                    console.log(`[DEBUG] ${repo.full_name}: ${count} commits today`);
+                }
             }
 
             console.log(`[DEBUG] ${username} → ${total} commits today`);
@@ -123,10 +116,17 @@ class GitHubService {
     async getWeeklyCommits(username) {
         try {
             const now = new Date();
-            const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const since = weekAgo.toISOString();
             const until = now.toISOString();
 
+            console.log(`[DEBUG] Weekly range: ${since} to ${until}`);
+
             const repos = await this.getUserRepos(username);
+
+            if (!repos.length) {
+                return 0;
+            }
 
             let total = 0;
 
@@ -140,6 +140,7 @@ class GitHubService {
                 total += count;
             }
 
+            console.log(`[DEBUG] ${username} → ${total} commits this week`);
             return total;
 
         } catch (err) {
@@ -150,16 +151,23 @@ class GitHubService {
 
     async getContributionStreak(username) {
         try {
+            console.log(`[DEBUG] Calculating streak for ${username}`);
             const repos = await this.getUserRepos(username);
-            const today = new Date();
+
+            if (!repos.length) {
+                return 0;
+            }
 
             let streak = 0;
+            const today = new Date();
 
             for (let i = 0; i < 30; i++) {
-                const day = new Date(today.getTime() - i * 86400000);
-
-                const since = new Date(day.setUTCHours(0,0,0,0)).toISOString();
-                const until = new Date(day.setUTCHours(23,59,59,999)).toISOString();
+                const day = new Date(today);
+                day.setDate(today.getDate() - i);
+                day.setUTCHours(0, 0, 0, 0);
+                
+                const since = day.toISOString();
+                const until = new Date(day.getTime() + 86400000 - 1).toISOString();
 
                 let commits = 0;
 
@@ -179,6 +187,7 @@ class GitHubService {
                 }
             }
 
+            console.log(`[DEBUG] ${username} → ${streak} day streak`);
             return streak;
 
         } catch (err) {
