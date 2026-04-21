@@ -543,7 +543,7 @@
     ],
     "totalXp": 297,
     "weeklyXp": 0,
-    "active": null,
+    "active": 1776792348394,
     "activeBonus": 1
   },
   "1141381287425347704": {
@@ -666,7 +666,7 @@
     ],
     "totalXp": 128,
     "weeklyXp": 0,
-    "active": null,
+    "active": 1776791429965,
     "activeBonus": 1
   },
   "729214501085511751": {
@@ -768,11 +768,17 @@
         "end": 1776529301478,
         "xp": 0,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791240160,
+        "end": 1776791761817,
+        "xp": 8,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 117,
-    "weeklyXp": 0,
-    "active": null,
+    "totalXp": 125,
+    "weeklyXp": 8,
+    "active": 1776791765851,
     "activeBonus": 1
   },
   "914924071588859944": {
@@ -815,11 +821,95 @@
         "end": 1776532448598,
         "xp": 3,
         "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791218545,
+        "end": 1776791221378,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791227976,
+        "end": 1776791338738,
+        "xp": 1,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791346781,
+        "end": 1776791422333,
+        "xp": 1,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791476634,
+        "end": 1776791554884,
+        "xp": 1,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791646296,
+        "end": 1776791724264,
+        "xp": 1,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776791931202,
+        "end": 1776792038337,
+        "xp": 1,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792038339,
+        "end": 1776792046131,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792046132,
+        "end": 1776792052313,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792052314,
+        "end": 1776792059630,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792059631,
+        "end": 1776792067567,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792067568,
+        "end": 1776792072037,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792072039,
+        "end": 1776792106410,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792199850,
+        "end": 1776792203827,
+        "xp": 0,
+        "bonusMultiplier": 1
+      },
+      {
+        "start": 1776792280821,
+        "end": 1776792283395,
+        "xp": 0,
+        "bonusMultiplier": 1
       }
     ],
-    "totalXp": 3,
-    "weeklyXp": 0,
-    "active": null,
+    "totalXp": 8,
+    "weeklyXp": 5,
+    "active": 1776792290192,
     "activeBonus": 1
   }
 }
