@@ -1,5 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require("discord.js");
 const { getVoiceConnection } = require("@discordjs/voice");
+const vc247Service = require("../services/vc247Service");
 const { createMusicEmbed, createControlButtons, createSongSelectMenu } = require("../utils/musicHelpers");
 
 module.exports = async (interaction, musicService) => {
@@ -263,15 +264,20 @@ module.exports = async (interaction, musicService) => {
             session.current = null;
             session.playing = false;
             session.loop = "off";
-            
+
+            const is247 = vc247Service.getStatus(interaction.guild.id)?.enabled;
             const conn = getVoiceConnection(interaction.guild.id);
-            if (conn) {
+            if (!is247 && conn) {
                 conn.destroy();
+                musicService.sessions.delete(interaction.guild.id);
             }
-            
-            musicService.sessions.delete(interaction.guild.id);
-            
-            const stopMsg = await interaction.reply({ content: "Stopped music and disconnected from voice channel.", flags: 64 });
+
+            const stopMsg = await interaction.reply({
+                content: is247
+                    ? "Stopped music. 24/7 mode is enabled, so the bot will remain in the voice channel."
+                    : "Stopped music and disconnected from voice channel.",
+                flags: 64
+            });
             setTimeout(async () => {
                 try {
                     await stopMsg.delete();

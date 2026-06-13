@@ -1,3 +1,5 @@
+const vc247Service = require("../services/vc247Service");
+
 module.exports = async (oldState, newState, vcTracker, smartVCService, musicService, client) => {
     console.log(`Voice state update: ${oldState.channelId} -> ${newState.channelId} for user ${newState.member?.id}`);
     const userId = newState.member?.id;
@@ -45,10 +47,12 @@ module.exports = async (oldState, newState, vcTracker, smartVCService, musicServ
 
     smartVCService.voiceStateUpdate(oldState, newState);
 
-    // Auto-disconnect bot when no users in voice channel
+    // Auto-disconnect bot when no users in voice channel unless 24/7 mode is enabled for this channel
     const botNewChannel = newState.guild.members.me?.voice.channel;
-    
-    if (botNewChannel) {
+    const vc247Config = vc247Service.getStatus(newState.guild.id);
+    const is247Active = vc247Config?.enabled && botNewChannel?.id === vc247Config.channelId;
+
+    if (botNewChannel && !is247Active) {
         const members = botNewChannel.members.filter(member => !member.user.bot);
         if (members.size === 0) {
             setTimeout(() => {

@@ -7,6 +7,7 @@ const {
     AudioPlayerStatus,
 } = require("@discordjs/voice");
 const { spawn } = require("child_process");
+const vc247Service = require("./vc247Service");
 
 class MusicService {
     constructor() {
@@ -427,6 +428,11 @@ class MusicService {
     startIdleDisconnect(guild) {
         const session = this.getSession(guild.id);
         const textChannel = session.lastMessage?.channel;
+        const config = vc247Service.getStatus(guild.id);
+
+        if (config?.enabled && session.connection?.joinConfig?.channelId === config.channelId) {
+            return;
+        }
 
         if (session.idleTimer) {
             clearTimeout(session.idleTimer);

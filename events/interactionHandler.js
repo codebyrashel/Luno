@@ -2,6 +2,7 @@ const focusCommand = require("../commands/focus");
 const leaderboardCommand = require("../commands/leaderboard");
 const goalCommand = require("../commands/goal");
 const smartVCCommand = require("../commands/smartvc");
+const vc247Command = require("../commands/vc247");
 const musicCommands = require("../commands/music");
 const leetcodeCommand = require("../commands/leetcode");
 
@@ -10,6 +11,7 @@ const commands = {
   leaderboard: leaderboardCommand,
   goal: goalCommand,
   smartvc: smartVCCommand,
+  vc247: vc247Command,
   play: musicCommands,
   leetcode: leetcodeCommand,
 };
